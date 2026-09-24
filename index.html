@@ -414,7 +414,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
           const ups=regs.filter(r=>base.get(r.id)!==JSON.stringify({id:r.id,nombre:r.nombre,codigo:r.codigo||'',motivo:r.motivo||'',ts:r.ts}));
           const dels=[...base.keys()].filter(k=>!ids.has(k));
           await rpc('reg_apply',{p_code:CODE,p_user:USER,p_fecha:id,p_upserts:ups.map(r=>({id:r.id,nombre:r.nombre,codigo:r.codigo||'',motivo:r.motivo||'',ts:r.ts||''})),p_deletes:dels});
-          notifyDia(id,await leerDia(id));
+          notifyDia(id,await leerDia(id)); if(window.refrescarRanking) window.refrescarRanking();
         },
         onSnapshot:(next,err)=>{
           const w={next,last:null}; (watchers[path]=watchers[path]||[]).push(w);
@@ -447,6 +447,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     };
     return api;
   }
+  window.__reg={rpc,code:()=>CODE,user:()=>USER};
   const db={doc,collection};
   const downloads={save:async({filename,data})=>{ const b=data instanceof Blob?data:new Blob([data]); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=filename; document.body.appendChild(a); a.click(); a.remove(); return {status:'saved'}; }};
 
@@ -470,7 +471,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     if(USER&&await probar()){ mostrarUsuario(); resolveLogin(); } else pedirCodigo();
   });
   window.claude={use:async n=>{ if(n==='db'){ await loggedIn; return db; } if(n==='downloads') return downloads; return null; }};
-  function mostrarUsuario(){ const el=document.getElementById('userchip'); if(!el) return; el.querySelector('b').textContent=USER; el.hidden=false; }
+  function mostrarUsuario(){ const el=document.getElementById('userchip'); if(!el) return; el.querySelector('b').textContent=USER; el.hidden=false; if(window.iniciarRanking) window.iniciarRanking(); }
   window.cerrarSesionRegistro=()=>{ try{ localStorage.removeItem(LU); }catch(e){} location.reload(); };
 })();
 </script>
@@ -972,6 +973,83 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   $('copymotivos').onclick=()=>{ const n=rows.filter(r=>r.motivo).length; copy(rows.map(r=>r.motivo||'').join('\n'),n+' de '+rows.length+' motivos'); };
   $('copynames').onclick=()=>copy(rows.map(r=>r.nombre).join('\n'),'Nombres');
   $('copytable').onclick=()=>copy(rows.map(r=>(r.codigo||lookup(r.nombre)?.codigo||'')+'\t'+r.nombre).join('\n'),rows.length+' filas (código + nombre)');
+})();
+</script>
+
+<aside id="ranking" class="rank" hidden>
+  <div class="rankhead">
+    <h2>🏆 Top registros</h2>
+    <div class="ranktabs" role="tablist">
+      <button type="button" data-p="hoy" class="on">Hoy</button>
+      <button type="button" data-p="semana">Semana</button>
+      <button type="button" data-p="mes">Mes</button>
+    </div>
+  </div>
+  <ol id="ranklist" class="ranklist"></ol>
+  <p id="rankfoot" class="rankfoot"></p>
+</aside>
+<style>
+.rank{background:rgb(25 21 38 / .82);border:1px solid #2c2440;border-radius:14px;padding:16px;display:grid;gap:12px;align-content:start;box-shadow:0 10px 30px rgb(0 0 0 / .25);backdrop-filter:blur(6px);color:#e9e9ed}
+.rank[hidden]{display:none!important}
+.rankhead{display:grid;gap:10px}
+.rank h2{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.ranktabs{display:flex;background:#14111f;border:1px solid #2c2440;border-radius:999px;padding:3px;gap:2px}
+.ranktabs button{flex:1;border:0;background:none;color:#a6a3b3;border-radius:999px;padding:6px 8px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.ranktabs button.on{background:linear-gradient(135deg,#7c5cff,#5b3fd6);color:#fff;box-shadow:0 0 12px rgb(124 92 255 / .35)}
+.ranklist{list-style:none;margin:0;padding:0;display:grid;gap:6px;max-height:calc(100vh - 190px);overflow:auto}
+.ranklist li{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:#14111f;border:1px solid transparent;position:relative;overflow:hidden}
+.ranklist li .bar{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,rgb(124 92 255 / .22),rgb(124 92 255 / 0));z-index:0}
+.ranklist li>*{position:relative;z-index:1}
+.ranklist .pos{font-weight:800;color:#a6a3b3;text-align:center;font-size:14px}
+.ranklist .medal{font-size:19px}
+.ranklist .nom{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:capitalize}
+.ranklist .tot{font-weight:800;font-variant-numeric:tabular-nums;color:#c4b8ff}
+.ranklist li.yo{border-color:#7c5cff;box-shadow:0 0 12px rgb(124 92 255 / .3)}
+.ranklist li.yo .nom::after{content:" · tú";color:#9184d9;font-weight:500;text-transform:none}
+.ranklist li.top1{background:linear-gradient(135deg,#2e2250,#191526)}
+.rankempty{color:#a6a3b3;font-size:13px;padding:6px 2px}
+.rankfoot{margin:0;font-size:11px;color:#6f6c80}
+@media (min-width:1200px){
+  body{padding-right:320px}
+  .rank{position:fixed;top:24px;right:24px;width:280px;max-height:calc(100vh - 48px)}
+}
+@media (max-width:1199px){
+  .rank{max-width:828px;margin:0 auto 90px;width:calc(100% - 32px)}
+}
+</style>
+<script>
+(function(){
+  let periodo='hoy', t=null, busy=false;
+  const pad=n=>String(n).padStart(2,'0');
+  const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  function rango(){
+    const h=new Date(); const hasta=iso(h);
+    if(periodo==='hoy') return [hasta,hasta,'hoy'];
+    if(periodo==='semana'){ const d=new Date(h); const w=(d.getDay()+6)%7; d.setDate(d.getDate()-w); return [iso(d),hasta,'desde el lunes']; }
+    const d=new Date(h.getFullYear(),h.getMonth(),1); return [iso(d),hasta,'este mes'];
+  }
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  async function cargar(){
+    if(busy||!window.__reg) return; busy=true;
+    try{
+      const [d,h,txt]=rango();
+      const rows=await window.__reg.rpc('reg_ranking',{p_code:window.__reg.code(),p_desde:d,p_hasta:h})||[];
+      const yo=window.__reg.user(); const max=rows.length?Number(rows[0].total):1;
+      const ol=document.getElementById('ranklist');
+      if(!rows.length){ ol.innerHTML='<li class="rankempty" style="display:block;background:none">Aún nadie registra '+txt+'.</li>'; }
+      else ol.innerHTML=rows.map((r,i)=>{ const m=['🥇','🥈','🥉'][i]; const pct=Math.max(6,Math.round(Number(r.total)/max*100));
+        return '<li class="'+(r.usuario===yo?'yo ':'')+(i===0?'top1':'')+'"><span class="bar" style="width:'+pct+'%"></span><span class="pos">'+(m?'<span class="medal">'+m+'</span>':(i+1))+'</span><span class="nom" title="'+esc(r.usuario)+'">'+esc(r.usuario)+'</span><span class="tot">'+r.total+'</span></li>'; }).join('');
+      const tot=rows.reduce((a,r)=>a+Number(r.total),0);
+      document.getElementById('rankfoot').textContent=tot+' registros del equipo '+txt+' · se actualiza solo';
+    }catch(e){}
+    busy=false;
+  }
+  window.refrescarRanking=()=>setTimeout(cargar,300);
+  window.iniciarRanking=()=>{
+    const el=document.getElementById('ranking'); if(!el) return; el.hidden=false;
+    el.querySelectorAll('.ranktabs button').forEach(b=>b.onclick=()=>{ periodo=b.dataset.p; el.querySelectorAll('.ranktabs button').forEach(x=>x.classList.toggle('on',x===b)); cargar(); });
+    cargar(); clearInterval(t); t=setInterval(()=>{ if(!document.hidden) cargar(); },15000);
+  };
 })();
 </script>
 
