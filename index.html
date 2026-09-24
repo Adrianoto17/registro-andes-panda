@@ -256,6 +256,7 @@ tbody tr:hover td{background:#201a30}
 .toast{background:linear-gradient(135deg,#41308f,#201a30)!important;color:#e9e9ed!important;border:1px solid #5b3fd6;box-shadow:0 0 20px rgb(124 92 255 / .35)}
 .loginov{background:radial-gradient(130% 90% at 50% -20%, #2a1f52 0%, #150f28 30%, #0d0a14 62%),#0d0a14!important}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <div class="wrap">
   <div class="topbar" aria-hidden="true"></div>
@@ -384,7 +385,26 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   const LU='registroUsuario';
   const CODE='panda-mrcapj'; let USER=null; try{ USER=localStorage.getItem(LU); }catch(e){}
   const headers=()=>{ const h={'apikey':CFG.key,'Content-Type':'application/json'}; if(/^eyJ/.test(CFG.key)) h['Authorization']='Bearer '+CFG.key; return h; };
-  async function rpc(fn,args){
+  async function rpc(fn,args){ if(CFG.url==='local') return rpcLocal(fn,args); return rpcRemota(fn,args); }
+  // ---- modo local (prueba): todo se guarda solo en este navegador ----
+  const LKEY='registroLocalPrueba';
+  const ldb=()=>{ try{ return JSON.parse(localStorage.getItem(LKEY))||{r:[],kv:{}}; }catch(e){ return {r:[],kv:{}}; } };
+  const lsave=d=>{ try{ localStorage.setItem(LKEY,JSON.stringify(d)); }catch(e){} };
+  async function rpcLocal(fn,a){
+    const d=ldb(); const u=String(a.p_user||'').trim().toLowerCase();
+    if(fn==='reg_check') return true;
+    if(fn==='reg_list') return d.r.filter(x=>x.usuario===u&&x.fecha>=a.p_desde&&x.fecha<=a.p_hasta).sort((x,y)=>x.fecha<y.fecha?-1:x.fecha>y.fecha?1:(x.ts||'')<(y.ts||'')?-1:1);
+    if(fn==='reg_apply'){ const del=new Set(a.p_deletes||[]); d.r=d.r.filter(x=>!(x.usuario===u&&x.fecha===a.p_fecha&&del.has(x.id)));
+      (a.p_upserts||[]).forEach(up=>{ const i=d.r.findIndex(x=>x.usuario===u&&x.id===up.id); const row={usuario:u,fecha:a.p_fecha,id:up.id,nombre:up.nombre,codigo:up.codigo||'',motivo:up.motivo||'',ts:up.ts||null}; if(i>=0) d.r[i]=Object.assign(d.r[i],{nombre:row.nombre,codigo:row.codigo,motivo:row.motivo}); else d.r.push(row); });
+      lsave(d); return null; }
+    if(fn==='reg_ranking'){ const c={}; d.r.forEach(x=>{ if(x.fecha>=a.p_desde&&x.fecha<=a.p_hasta) c[x.usuario]=(c[x.usuario]||0)+1; }); return Object.entries(c).sort((x,y)=>y[1]-x[1]||(x[0]<y[0]?-1:1)).map(([usuario,total])=>({usuario,total})); }
+    if(fn==='reg_admin_check') return a.p_pass==='admin123';
+    if(fn==='reg_admin_list'){ if(a.p_pass!=='admin123') throw {code:'invalid_argument',message:'clave'}; return d.r.filter(x=>(!a.p_user||x.usuario===a.p_user)&&x.fecha>=a.p_desde&&x.fecha<=a.p_hasta).map(x=>Object.assign({},x)); }
+    if(fn==='reg_kv_get') return d.kv[a.p_clave]??null;
+    if(fn==='reg_kv_set'){ d.kv[a.p_clave]=a.p_valor; lsave(d); return null; }
+    return null;
+  }
+  async function rpcRemota(fn,args){
     let r; try{ r=await fetch(CFG.url.replace(/\/$/,'')+'/rest/v1/rpc/'+fn,{method:'POST',headers:headers(),body:JSON.stringify(args)}); }
     catch(e){ throw {code:'unavailable',message:'sin conexión'}; }
     const tx=await r.text();
@@ -1050,6 +1070,571 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     el.querySelectorAll('.ranktabs button').forEach(b=>b.onclick=()=>{ periodo=b.dataset.p; el.querySelectorAll('.ranktabs button').forEach(x=>x.classList.toggle('on',x===b)); cargar(); });
     cargar(); clearInterval(t); t=setInterval(()=>{ if(!document.hidden) cargar(); },15000);
   };
+})();
+</script>
+
+<div id="admin" class="adm" hidden>
+  <div class="admwrap">
+    <header class="admhead">
+      <div>
+        <p class="admkick">Andes Panda · Administración</p>
+        <h1 class="admtitle">Panel de administrador</h1>
+      </div>
+      <button type="button" class="btn" id="admsalir">Salir</button>
+    </header>
+
+    <section class="panel admctl" aria-label="Periodo">
+      <div class="admrow">
+        <span class="small admlbl">Periodo</span>
+        <div class="admchips" id="admchips">
+          <button type="button" data-r="sem" class="on">Esta semana</button>
+          <button type="button" data-r="semp">Semana pasada</button>
+          <button type="button" data-r="mes">Este mes</button>
+          <button type="button" data-r="mesp">Mes pasado</button>
+        </div>
+      </div>
+      <div class="admrow">
+        <label class="small admlbl" for="admdesde">Desde</label>
+        <input type="date" id="admdesde">
+        <label class="small admlbl" for="admhasta">Hasta</label>
+        <input type="date" id="admhasta">
+        <button type="button" class="btn" id="admver">Ver</button>
+      </div>
+      <p class="admdemo" id="admdemo" hidden>Modo prueba: <button type="button" class="btn" id="admseed">Cargar datos de ejemplo</button> crea registros inventados de 3 trabajadores para probar el Excel.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="admreshd">
+      <div class="admsec">
+        <h2 id="admreshd">Resumen del equipo</h2>
+        <button type="button" class="btn primary" id="admexpall">Exportar Excel de todos</button>
+      </div>
+      <div class="admtbl"><table>
+        <thead><tr><th>Trabajador</th><th class="r">Registros</th><th class="r">Días activos</th><th class="r">Promedio / día</th><th class="r">Días con meta</th><th></th></tr></thead>
+        <tbody id="admres"></tbody>
+      </table></div>
+      <p class="status" id="admstat"></p>
+    </section>
+
+    <section class="panel" id="admdet" hidden aria-labelledby="admdethd">
+      <div class="admsec">
+        <h2 id="admdethd">Detalle</h2>
+        <button type="button" class="btn primary" id="admexpone">Exportar Excel</button>
+      </div>
+      <div class="admkpis" id="admkpis"></div>
+      <div class="admtbl admtall"><table>
+        <thead><tr><th>Fecha</th><th>Hora</th><th>ID de creador</th><th>Usuario TikTok</th><th>Motivo</th></tr></thead>
+        <tbody id="admrows"></tbody>
+      </table></div>
+    </section>
+  </div>
+</div>
+
+<style>
+.adm{position:fixed;inset:0;z-index:65;overflow:auto;background:radial-gradient(130% 90% at 50% -20%, #2a1f52 0%, #150f28 30%, #0d0a14 62%),#0d0a14;color:#e9e9ed}
+.adm[hidden]{display:none!important}
+.admwrap{max-width:980px;margin:0 auto;padding:28px 16px 60px;display:grid;gap:18px}
+.admhead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.admkick{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9184d9;font-weight:700}
+.admtitle{margin:4px 0 0;font-size:clamp(24px,4vw,32px);font-weight:800;letter-spacing:-.02em}
+.admctl{gap:12px}
+.admrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.admlbl{min-width:52px}
+.admchips{display:flex;flex-wrap:wrap;gap:6px}
+.admchips button{border:1px solid #2c2440;background:#14111f;color:#a6a3b3;border-radius:999px;padding:7px 13px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.admchips button.on{background:linear-gradient(135deg,#7c5cff,#5b3fd6);color:#fff;border-color:transparent;box-shadow:0 0 12px rgb(124 92 255 / .35)}
+.admdemo{margin:0;font-size:13px;color:#a6a3b3;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.admsec{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.admsec h2{margin:0;font-size:17px}
+.admtbl{overflow:auto;border:1px solid #2c2440;border-radius:10px}
+.admtall{max-height:420px}
+.admtbl table{width:100%;border-collapse:collapse;font-size:14px}
+.admtbl th{position:sticky;top:0;z-index:1}
+.admtbl td{padding:9px 12px;border-bottom:1px solid #221c33;font-variant-numeric:tabular-nums}
+.admtbl .r{text-align:right}
+.admtbl tr.sel td{background:#2e2250}
+.admtbl td.nom{font-weight:700;text-transform:capitalize}
+.admtbl td.mono{font-family:var(--mono);font-size:13px}
+.admtbl .btn{padding:5px 10px;font-size:13px}
+.admkpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.admkpi{background:#14111f;border:1px solid #2c2440;border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+.admkpi b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.admkpi span{font-size:12px;color:#a6a3b3}
+.admkpi.ok b{color:#8FE0BC}
+.loginadm{background:none;border:0;color:#9184d9;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px}
+.loginadm:hover{color:#c4b8ff}
+</style>
+
+<script>
+(function(){
+  const META=40;
+  const $=id=>document.getElementById(id);
+  let PASS=null, DESDE='', HASTA='', ROWS=[], SEL=null, rango='sem';
+  const pad=n=>String(n).padStart(2,'0');
+  const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  const fdm=f=>f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(0,4);
+  const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const dia=f=>DIAS[new Date(f+'T12:00:00').getDay()];
+  const hora=ts=>{ if(!ts) return ''; const d=new Date(ts); if(isNaN(d)) return ''; return pad(d.getHours())+':'+pad(d.getMinutes()); };
+  const cap=s=>String(s||'').replace(/\b\p{L}/gu,c=>c.toUpperCase());
+  const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const rpc=(fn,a)=>window.__reg.rpc(fn,Object.assign({p_code:window.__reg.code(),p_pass:PASS},a));
+
+  function setRango(r){
+    rango=r; const h=new Date(); let d1,d2;
+    if(r==='sem'){ d1=new Date(h); d1.setDate(h.getDate()-((h.getDay()+6)%7)); d2=new Date(d1); d2.setDate(d1.getDate()+6); }
+    else if(r==='semp'){ d1=new Date(h); d1.setDate(h.getDate()-((h.getDay()+6)%7)-7); d2=new Date(d1); d2.setDate(d1.getDate()+6); }
+    else if(r==='mes'){ d1=new Date(h.getFullYear(),h.getMonth(),1); d2=new Date(h.getFullYear(),h.getMonth()+1,0); }
+    else { d1=new Date(h.getFullYear(),h.getMonth()-1,1); d2=new Date(h.getFullYear(),h.getMonth(),0); }
+    $('admdesde').value=iso(d1); $('admhasta').value=iso(d2);
+    document.querySelectorAll('#admchips button').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
+    cargar();
+  }
+
+  // ---- métricas ----
+  function diasRango(d1,d2){ const out=[]; const hoy=iso(new Date()); const fin=d2<hoy?d2:hoy; let d=new Date(d1+'T12:00:00'); while(iso(d)<=fin){ out.push(iso(d)); d.setDate(d.getDate()+1); } return out; }
+  function metricas(rows,d1,d2){
+    const porDia={}; rows.forEach(r=>{ porDia[r.fecha]=(porDia[r.fecha]||0)+1; });
+    const dias=diasRango(d1,d2).map(f=>({f,n:porDia[f]||0}));
+    Object.keys(porDia).forEach(f=>{ if(!dias.find(x=>x.f===f)) dias.push({f,n:porDia[f]}); });
+    dias.sort((a,b)=>a.f<b.f?-1:1);
+    const activos=dias.filter(x=>x.n>0), conMeta=activos.filter(x=>x.n>=META);
+    let mejor=null; activos.forEach(x=>{ if(!mejor||x.n>mejor.n) mejor=x; });
+    const mot={}; rows.forEach(r=>{ const m=(r.motivo||'').trim()||'Sin motivo'; mot[m]=(mot[m]||0)+1; });
+    const motivos=Object.entries(mot).sort((a,b)=>b[1]-a[1]);
+    let prev=null, subio=0, bajo=0, igual=0;
+    dias.forEach(x=>{ x.cambio=null; x.tend=x.n?'Primer día':'—'; if(x.n>0){ if(prev!==null){ x.cambio=x.n-prev; x.tend=x.cambio>0?'Subió':x.cambio<0?'Bajó':'Igual'; if(x.cambio>0) subio++; else if(x.cambio<0) bajo++; else igual++; } prev=x.n; } });
+    let peor=null; activos.forEach(x=>{ if(!peor||x.n<peor.n) peor=x; });
+    return {total:rows.length,dias,activos:activos.length,conMeta:conMeta.length,prom:activos.length?rows.length/activos.length:0,mejor,peor,motivos,subio,bajo,igual};
+  }
+  function porUsuario(){ const m=new Map(); ROWS.forEach(r=>{ if(!m.has(r.usuario)) m.set(r.usuario,[]); m.get(r.usuario).push(r); }); return m; }
+
+  async function cargar(){
+    DESDE=$('admdesde').value; HASTA=$('admhasta').value; if(!DESDE||!HASTA) return;
+    $('admstat').textContent='Cargando…';
+    try{ ROWS=(await rpc('reg_admin_list',{p_user:null,p_desde:DESDE,p_hasta:HASTA}))||[]; }
+    catch(e){ $('admstat').textContent='No se pudieron cargar los registros. Revisa tu conexión y toca Ver.'; return; }
+    ROWS.sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:((a.ts||'')<(b.ts||'')?-1:1));
+    const pu=porUsuario(); const lista=[...pu.entries()].map(([u,rs])=>({u,rs,m:metricas(rs,DESDE,HASTA)})).sort((a,b)=>b.m.total-a.m.total);
+    $('admres').innerHTML=lista.length?lista.map(x=>'<tr data-u="'+esc(x.u)+'"'+(x.u===SEL?' class="sel"':'')+'><td class="nom">'+esc(x.u)+'</td><td class="r">'+x.m.total+'</td><td class="r">'+x.m.activos+'</td><td class="r">'+x.m.prom.toFixed(1)+'</td><td class="r">'+x.m.conMeta+'</td><td class="r"><button type="button" class="btn">Ver detalle</button></td></tr>').join(''):'<tr><td colspan="6" style="color:#a6a3b3">Nadie registró en este periodo.</td></tr>';
+    $('admres').querySelectorAll('tr[data-u]').forEach(tr=>tr.onclick=()=>detalle(tr.dataset.u));
+    const tot=ROWS.length; $('admstat').textContent=tot+' registros del equipo del '+fdm(DESDE)+' al '+fdm(HASTA)+'.';
+    $('admexpall').disabled=!tot;
+    if(SEL&&pu.has(SEL)) detalle(SEL); else { SEL=null; $('admdet').hidden=true; }
+  }
+
+  function detalle(u){
+    SEL=u; const rs=porUsuario().get(u)||[]; const m=metricas(rs,DESDE,HASTA);
+    document.querySelectorAll('#admres tr[data-u]').forEach(tr=>tr.classList.toggle('sel',tr.dataset.u===u));
+    $('admdethd').textContent='Detalle de '+cap(u);
+    $('admexpone').textContent='Exportar Excel de '+cap(u);
+    const k=(v,l,c)=>'<div class="admkpi'+(c?' '+c:'')+'"><b>'+v+'</b><span>'+l+'</span></div>';
+    $('admkpis').innerHTML=k(m.total,'registros')+k(m.activos,'días activos')+k(m.prom.toFixed(1),'promedio por día activo')+k(m.conMeta+' de '+m.activos,'días con meta de '+META,m.conMeta?'ok':'')+k(m.mejor?m.mejor.n+' · '+fdm(m.mejor.f).slice(0,5):'—','mejor día');
+    $('admrows').innerHTML=rs.map(r=>'<tr><td>'+fdm(r.fecha)+'</td><td>'+hora(r.ts)+'</td><td class="mono">'+esc(r.codigo)+'</td><td>'+esc(r.nombre)+'</td><td>'+esc(r.motivo)+'</td></tr>').join('');
+    $('admdet').hidden=false;
+  }
+
+  // ================= EXCEL CON DASHBOARD =================
+  const xe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+  const colL=n=>{ let s=''; n++; while(n){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; };
+  const hoja=(nombre,suf,usadas)=>{ const lim=nombre=>cap(nombre).replace(/[\[\]:*?\/\\]/g,''); let base=(suf?lim(nombre).slice(0,31-suf.length-3)+' - '+suf:lim(nombre).slice(0,31)).trim()||'Hoja'; let n=base,i=2; while(usadas.has(n.toLowerCase())){ n=base.slice(0,28)+' '+i++; } usadas.add(n.toLowerCase()); return n; };
+  const ref=(sh,c,r1,r2)=>"'"+sh.replace(/'/g,"''")+"'!$"+colL(c)+'$'+(r1+1)+':$'+colL(c)+'$'+(r2+1);
+  const strCache=v=>'<c:strCache><c:ptCount val="'+v.length+'"/>'+v.map((x,i)=>'<c:pt idx="'+i+'"><c:v>'+xe(x)+'</c:v></c:pt>').join('')+'</c:strCache>';
+  const numCache=v=>'<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="'+v.length+'"/>'+v.map((x,i)=>x===null||x===undefined||x===''?'':'<c:pt idx="'+i+'"><c:v>'+x+'</c:v></c:pt>').join('')+'</c:numCache>';
+  const catXml=(f,v)=>'<c:cat><c:strRef><c:f>'+xe(f)+'</c:f>'+strCache(v)+'</c:strRef></c:cat>';
+  const valXml=(f,v)=>'<c:val><c:numRef><c:f>'+xe(f)+'</c:f>'+numCache(v)+'</c:numRef></c:val>';
+  const fill=c=>'<c:spPr><a:solidFill><a:srgbClr val="'+c+'"/></a:solidFill></c:spPr>';
+  const grad=(c1,c2,ang)=>'<c:spPr><a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="'+c1+'"/></a:gs><a:gs pos="100000"><a:srgbClr val="'+c2+'"/></a:gs></a:gsLst><a:lin ang="'+(ang||5400000)+'" scaled="0"/></a:gradFill><a:ln><a:noFill/></a:ln></c:spPr>';
+  const sinFondo='<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>';
+  const K={bg:'1C1730',txt:'E9E9ED',mut:'A6A3B3',grid:'2C2440',vio:'8B6CFF',vio2:'B7A6FF',grn:'34D399',red:'F87171',amb:'F5B83D',gry:'3A3450'};
+  const txt=(sz,col)=>'<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="'+sz+'"><a:solidFill><a:srgbClr val="'+(col||K.mut)+'"/></a:solidFill></a:defRPr></a:pPr><a:endParaRPr lang="es-PE"/></a:p></c:txPr>';
+  const titulo=t=>'<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1300" b="1"/></a:pPr><a:r><a:rPr lang="es-PE" sz="1300" b="1"><a:solidFill><a:srgbClr val="'+K.txt+'"/></a:solidFill></a:rPr><a:t>'+xe(t)+'</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/>'+sinFondo+'</c:title><c:autoTitleDeleted val="0"/>';
+  const grid='<c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="'+K.grid+'"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>';
+  const noLine='<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>';
+  const axes=(horiz,sinMin)=>'<c:catAx><c:axId val="5001"/><c:scaling><c:orientation val="'+(horiz?'maxMin':'minMax')+'"/></c:scaling><c:delete val="0"/><c:axPos val="'+(horiz?'l':'b')+'"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="'+K.grid+'"/></a:solidFill></a:ln></c:spPr>'+txt(900)+'<c:crossAx val="5002"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>'
+    +'<c:valAx><c:axId val="5002"/><c:scaling><c:orientation val="minMax"/>'+(sinMin?'':'<c:min val="0"/>')+'</c:scaling><c:delete val="0"/><c:axPos val="'+(horiz?'b':'l')+'"/>'+grid+'<c:numFmt formatCode="0" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'+noLine+txt(900)+'<c:crossAx val="5001"/><c:crosses val="'+(horiz?'max':'autoZero')+'"/><c:crossBetween val="between"/></c:valAx>';
+  const wrapChart=(t,plot,legend)=>'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:roundedCorners val="1"/><c:chart>'+titulo(t)+'<c:plotArea><c:layout/>'+plot+'<c:spPr><a:solidFill><a:srgbClr val="'+K.bg+'"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>'+(legend?'<c:legend><c:legendPos val="b"/><c:overlay val="0"/>'+sinFondo+txt(900)+'</c:legend>':'')+'<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr><a:solidFill><a:srgbClr val="'+K.bg+'"/></a:solidFill><a:ln w="12700"><a:solidFill><a:srgbClr val="2C2440"/></a:solidFill></a:ln></c:spPr><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr><a:solidFill><a:srgbClr val="'+K.mut+'"/></a:solidFill></a:defRPr></a:pPr><a:endParaRPr lang="es-PE"/></a:p></c:txPr></c:chartSpace>';
+  const dLblsVal=(pos)=>'<c:dLbls>'+txt(900,K.txt)+(pos?'<c:dLblPos val="'+pos+'"/>':'')+'<c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>';
+
+  function chartDias(t,catF,cats,valF,vals,metaF,metas){
+    const bar='<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Registros</c:v></c:tx>'+grad('B7A6FF','6A4BFF')+'<c:invertIfNegative val="0"/>'+(cats.length<=31?dLblsVal('outEnd'):'')+catXml(catF,cats)+valXml(valF,vals)+'</c:ser><c:gapWidth val="55"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>';
+    const line='<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:idx val="1"/><c:order val="1"/><c:tx><c:v>Meta diaria ('+META+')</c:v></c:tx><c:spPr><a:ln w="22225" cap="rnd"><a:solidFill><a:srgbClr val="'+K.amb+'"/></a:solidFill><a:prstDash val="dash"/></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker>'+catXml(catF,cats)+valXml(metaF,metas)+'<c:smooth val="0"/></c:ser><c:marker val="1"/><c:axId val="5001"/><c:axId val="5002"/></c:lineChart>';
+    return wrapChart(t,bar+line+axes(false),true);
+  }
+  function chartDona(t,catF,cats,valF,vals){
+    const pts=[K.grn,K.gry].map((c,i)=>'<c:dPt><c:idx val="'+i+'"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="'+c+'"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="'+K.bg+'"/></a:solidFill></a:ln></c:spPr></c:dPt>').join('');
+    const pl='<c:doughnutChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Días</c:v></c:tx>'+pts+'<c:dLbls>'+txt(1100,K.txt)+'<c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls>'+catXml(catF,cats)+valXml(valF,vals)+'</c:ser><c:firstSliceAng val="0"/><c:holeSize val="58"/></c:doughnutChart>';
+    return wrapChart(t,pl,true);
+  }
+  function chartBarras(t,catF,cats,valF,vals,color){
+    const pl='<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Registros</c:v></c:tx>'+grad(color||'6A4BFF',color?color:'B7A6FF',0)+'<c:invertIfNegative val="0"/>'+dLblsVal('outEnd')+catXml(catF,cats)+valXml(valF,vals)+'</c:ser><c:gapWidth val="45"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>';
+    return wrapChart(t,pl+axes(true),false);
+  }
+
+  function chartCambio(t,catF,cats,upF,ups,dnF,dns){
+    const ser=(i,nom,col,f,v)=>'<c:ser><c:idx val="'+i+'"/><c:order val="'+i+'"/><c:tx><c:v>'+nom+'</c:v></c:tx>'+(col==='G'?grad('6EE7B7','10B981'):grad('DC2626','FCA5A5'))+'<c:invertIfNegative val="0"/>'+(cats.length<=31?dLblsVal(col==='G'?'outEnd':'outEnd'):'')+catXml(catF,cats)+valXml(f,v)+'</c:ser>';
+    const pl='<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>'+ser(0,'Subió vs día anterior','G',upF,ups)+ser(1,'Bajó vs día anterior','R',dnF,dns)+'<c:gapWidth val="55"/><c:overlap val="100"/><c:axId val="5001"/><c:axId val="5002"/></c:barChart>';
+    return wrapChart(t,pl+axes(false,true).replace('<c:tickLblPos val="nextTo"/>','<c:tickLblPos val="low"/>'),true);
+  }
+
+  // ================= GRÁFICOS COMO IMAGEN (se ven en cualquier Excel/visor) =================
+  const CC={bg:'#1C1730',line:'#2C2440',grid:'#2A2342',txt:'#E9E9ED',mut:'#A6A3B3',faint:'#6F6C80',v1:'#B7A6FF',v2:'#6A4BFF',g1:'#6EE7B7',g2:'#10B981',r1:'#FCA5A5',r2:'#DC2626',amb:'#F5B83D',gry:'#3A3450'};
+  const FF='"Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif';
+  function lienzo(w,h,titulo){
+    const c=document.createElement('canvas'); c.width=w*2; c.height=h*2; const g=c.getContext('2d'); g.scale(2,2);
+    g.fillStyle='#100D1C'; g.fillRect(0,0,w,h);
+    rr(g,1,1,w-2,h-2,12); g.fillStyle=CC.bg; g.fill(); g.strokeStyle=CC.line; g.lineWidth=1; g.stroke();
+    g.fillStyle=CC.txt; g.font='700 14px '+FF; g.textBaseline='alphabetic'; g.textAlign='left'; g.fillText(titulo,18,30);
+    return {c,g};
+  }
+  function rr(g,x,y,w,h,r){ r=Math.max(0,Math.min(r,Math.abs(w)/2,Math.abs(h)/2)); g.beginPath(); g.moveTo(x+r,y); g.lineTo(x+w-r,y); g.quadraticCurveTo(x+w,y,x+w,y+r); g.lineTo(x+w,y+h-r); g.quadraticCurveTo(x+w,y+h,x+w-r,y+h); g.lineTo(x+r,y+h); g.quadraticCurveTo(x,y+h,x,y+h-r); g.lineTo(x,y+r); g.quadraticCurveTo(x,y,x+r,y); g.closePath(); }
+  function barra(g,x,y,w,h,c1,c2,arriba){ if(h<=0||w<=0) return; const gr=g.createLinearGradient(0,y,0,y+h); gr.addColorStop(0,arriba?c1:c2); gr.addColorStop(1,arriba?c2:c1); g.fillStyle=gr;
+    const r=Math.min(4,w/2,h); g.beginPath(); if(arriba){ g.moveTo(x,y+h); g.lineTo(x,y+r); g.quadraticCurveTo(x,y,x+r,y); g.lineTo(x+w-r,y); g.quadraticCurveTo(x+w,y,x+w,y+r); g.lineTo(x+w,y+h); } else { g.moveTo(x,y); g.lineTo(x+w,y); g.lineTo(x+w,y+h-r); g.quadraticCurveTo(x+w,y+h,x+w-r,y+h); g.lineTo(x+r,y+h); g.quadraticCurveTo(x,y+h,x,y+h-r); } g.closePath(); g.fill(); }
+  const techo=v=>{ if(v<=5) return 5; if(v<=10) return 10; const st=v<=60?10:v<=150?25:Math.pow(10,Math.floor(Math.log10(v))); return Math.ceil(v/st)*st; };
+  function ejeY(g,x0,x1,yOf,min,max,pasos){ g.font='10px '+FF; g.textAlign='right'; g.textBaseline='middle';
+    for(let i=0;i<=pasos;i++){ const v=min+(max-min)*i/pasos; const y=yOf(v); g.strokeStyle=v===0&&min<0?CC.faint:CC.grid; g.lineWidth=1; g.beginPath(); g.moveTo(x0,Math.round(y)+.5); g.lineTo(x1,Math.round(y)+.5); g.stroke(); g.fillStyle=CC.faint; g.fillText(String(Math.round(v)),x0-6,y); } }
+  function ejeX(g,labels,xOf,y,slot){ const n=labels.length; const cada=Math.max(1,Math.ceil(28/slot)); g.fillStyle=CC.mut; g.font='10px '+FF;
+    labels.forEach((l,i)=>{ if(i%cada) return; const x=xOf(i); if(slot<26){ g.save(); g.translate(x,y+4); g.rotate(-Math.PI/4); g.textAlign='right'; g.textBaseline='middle'; g.fillText(l,0,0); g.restore(); } else { g.textAlign='center'; g.textBaseline='top'; g.fillText(l,x,y+6); } }); }
+  function leyenda(g,items,x,y){ g.font='11px '+FF; g.textBaseline='middle'; g.textAlign='left'; let cx=x;
+    items.forEach(it=>{ if(it.dash){ g.strokeStyle=it.color; g.lineWidth=2; g.setLineDash([5,4]); g.beginPath(); g.moveTo(cx,y); g.lineTo(cx+18,y); g.stroke(); g.setLineDash([]); cx+=24; } else { rr(g,cx,y-5,10,10,3); g.fillStyle=it.color; g.fill(); cx+=16; } g.fillStyle=CC.mut; g.fillText(it.t,cx,y); cx+=g.measureText(it.t).width+18; }); }
+  const png=c=>{ const b=atob(c.toDataURL('image/png').split(',')[1]); const u=new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; };
+
+  function imgDias(w,h,labels,vals){
+    const {c,g}=lienzo(w,h,'Registros por día vs meta de '+META);
+    const x0=46,x1=w-18,y0=52,y1=h-(labels.length>16?78:58); const mx=techo(Math.max(META,...vals,1)*1.12);
+    const yOf=v=>y1-(v/mx)*(y1-y0); ejeY(g,x0,x1,yOf,0,mx,5);
+    const slot=(x1-x0)/Math.max(1,labels.length); const bw=Math.max(3,Math.min(34,slot*0.62)); const xOf=i=>x0+slot*i+slot/2;
+    vals.forEach((v,i)=>{ const y=yOf(v); barra(g,xOf(i)-bw/2,y,bw,y1-y,v>=META?CC.v1:'#9C8BE0',v>=META?CC.v2:'#5A45C8',true);
+      if(labels.length<=31&&v>0){ g.fillStyle=CC.txt; g.font=(slot<22?'600 9px ':'600 10px ')+FF; g.textAlign='center'; g.textBaseline='bottom'; g.fillText(String(v),xOf(i),y-3); } });
+    const ym=Math.round(yOf(META))+.5; g.strokeStyle=CC.amb; g.lineWidth=2; g.setLineDash([6,5]); g.beginPath(); g.moveTo(x0,ym); g.lineTo(x1,ym); g.stroke(); g.setLineDash([]);
+    g.fillStyle=CC.amb; g.font='700 10px '+FF; g.textAlign='right'; g.textBaseline='bottom'; g.fillText('Meta '+META,x1,ym-4);
+    ejeX(g,labels,xOf,y1,slot);
+    leyenda(g,[{t:'Registros',color:'#8B6CFF'},{t:'Meta diaria ('+META+')',color:CC.amb,dash:1}],x0,h-16);
+    return png(c);
+  }
+  function imgDona(w,h,ok,no){
+    const {c,g}=lienzo(w,h,'Días con meta cumplida'); const tot=ok+no;
+    const cx=w/2, cy=52+(h-52-70)/2, R=Math.min(w/2-30,(h-52-70)/2), r=R*0.62;
+    const partes=[[ok,CC.g2,CC.g1],[no,CC.gry,CC.gry]]; let a=-Math.PI/2;
+    if(!tot){ g.beginPath(); g.arc(cx,cy,R,0,2*Math.PI); g.arc(cx,cy,r,0,2*Math.PI,true); g.fillStyle=CC.gry; g.fill(); }
+    partes.forEach(([v,c1,c2])=>{ if(!v) return; const b=a+2*Math.PI*v/tot; const gr=g.createLinearGradient(cx-R,cy-R,cx+R,cy+R); gr.addColorStop(0,c2); gr.addColorStop(1,c1);
+      g.beginPath(); g.arc(cx,cy,R,a,b); g.arc(cx,cy,r,b,a,true); g.closePath(); g.fillStyle=gr; g.fill(); g.strokeStyle=CC.bg; g.lineWidth=3; g.stroke(); a=b; });
+    const pct=tot?Math.round(ok/tot*100):0;
+    g.fillStyle=CC.txt; g.font='800 30px '+FF; g.textAlign='center'; g.textBaseline='middle'; g.fillText(pct+'%',cx,cy-6);
+    g.fillStyle=CC.mut; g.font='11px '+FF; g.fillText('con meta',cx,cy+18);
+    g.font='12px '+FF; g.textAlign='left'; const ly=h-44;
+    [[CC.g2,'Cumplió la meta',ok],[CC.gry,'No llegó a la meta',no]].forEach(([col,t,v],i)=>{ const y=ly+i*20; rr(g,24,y-5,10,10,3); g.fillStyle=col; g.fill(); g.fillStyle=CC.mut; g.fillText(t,40,y); g.fillStyle=CC.txt; g.font='700 12px '+FF; g.textAlign='right'; g.fillText(v+(v===1?' día':' días'),w-24,y); g.font='12px '+FF; g.textAlign='left'; });
+    return png(c);
+  }
+  function imgCambio(w,h,labels,cambios){
+    const {c,g}=lienzo(w,h,'¿Subió o bajó respecto al día anterior?');
+    const x0=46,x1=w-18,y0=52,y1=h-(labels.length>16?78:58); const mxa=techo(Math.max(5,...cambios.map(v=>Math.abs(v||0)))*1.15);
+    const yOf=v=>y0+(mxa-v)/(2*mxa)*(y1-y0); ejeY(g,x0,x1,yOf,-mxa,mxa,4);
+    const slot=(x1-x0)/Math.max(1,labels.length); const bw=Math.max(3,Math.min(30,slot*0.6)); const xOf=i=>x0+slot*i+slot/2; const z=yOf(0);
+    cambios.forEach((v,i)=>{ if(v===null||v===undefined||v===0) return; const y=yOf(v); const up=v>0;
+      barra(g,xOf(i)-bw/2,up?y:z,bw,Math.abs(y-z),up?CC.g1:CC.r1,up?CC.g2:CC.r2,up);
+      if(labels.length<=31){ g.fillStyle=up?CC.g1:CC.r1; g.font='700 9px '+FF; g.textAlign='center'; g.textBaseline=up?'bottom':'top'; g.fillText((up?'+':'')+v,xOf(i),up?y-2:y+2); } });
+    ejeX(g,labels,xOf,y1,slot);
+    if(!cambios.some(v=>v)){ g.fillStyle=CC.mut; g.font='12px '+FF; g.textAlign='center'; g.textBaseline='middle'; g.fillText('Se llena desde el segundo día con registros',(x0+x1)/2,(y0+y1)/2-14); }
+    leyenda(g,[{t:'Subió',color:CC.g2},{t:'Bajó',color:CC.r2}],x0,h-16);
+    return png(c);
+  }
+  function imgHoriz(w,h,titulo,labels,vals,c1,c2){
+    const {c,g}=lienzo(w,h,titulo); const n=labels.length; if(!n) return png(c);
+    g.font='11px '+FF; const lw=Math.min(170,Math.max(...labels.map(l=>g.measureText(l).width))+10);
+    const x0=18+lw, x1=w-46, y0=50, y1=h-22; const mx=Math.max(1,...vals); const slot=(y1-y0)/n; const bh=Math.min(26,slot*0.62);
+    labels.forEach((l,i)=>{ const y=y0+slot*i+slot/2; const bwid=(vals[i]/mx)*(x1-x0);
+      g.fillStyle=CC.mut; g.font='11px '+FF; g.textAlign='right'; g.textBaseline='middle'; let t=l; while(g.measureText(t).width>lw-8&&t.length>3) t=t.slice(0,-2); if(t!==l) t=t.slice(0,-1)+'…'; g.fillText(t,x0-8,y);
+      rr(g,x0,y-bh/2,x1-x0,bh,5); g.fillStyle='#231D38'; g.fill();
+      const gr=g.createLinearGradient(x0,0,x0+bwid,0); gr.addColorStop(0,c2||CC.v2); gr.addColorStop(1,c1||CC.v1); rr(g,x0,y-bh/2,Math.max(6,bwid),bh,5); g.fillStyle=gr; g.fill();
+      g.fillStyle=CC.txt; g.font='700 11px '+FF; g.textAlign='left'; g.fillText(String(vals[i]),x0+Math.max(6,bwid)+6,y); });
+    return png(c);
+  }
+
+  // Construye las hojas de una persona. Devuelve charts para inyectar.
+  function hojasPersona(wb,u,rs,usadas,charts,solo){
+    const m=metricas(rs,DESDE,HASTA); const X=window.XLSX;
+    const shR=solo?hoja('Registro','',usadas):hoja(u,'Registro',usadas);
+    const shD=solo?hoja('Dashboard','',usadas):hoja(u,'Dashboard',usadas);
+    const reg=[['Fecha','ID de creador','Nombre TikTok','Motivo de comunicación','Hora']];
+    rs.forEach(x=>reg.push([x.fecha,String(x.codigo||''),x.nombre,x.motivo||'',hora(x.ts)]));
+    const wsR=X.utils.aoa_to_sheet(reg);
+    for(let k=2;k<=reg.length;k++){ const c=wsR['B'+k]; if(c){ c.t='s'; c.z='@'; } }
+    wsR['!cols']=[{wch:12},{wch:22},{wch:26},{wch:40},{wch:10}];
+    X.utils.book_append_sheet(wb,wsR,shR); X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([['']]),shD); const idxD=wb.SheetNames.length;
+    (wb.__dash=wb.__dash||{})[idxD]={u,m};
+    const cats=m.dias.map(d=>fdm(d.f).slice(0,5)); const mo=m.motivos.slice(0,8);
+    const list=[
+      {png:imgDias(690,372,cats,m.dias.map(d=>d.n)),col:1,row:12,dx:0,dy:0,to:[11,30,0,0]},
+      {png:imgDona(338,372,m.conMeta,Math.max(0,m.activos-m.conMeta)),col:11,row:12,dx:10,dy:0,to:[16,30,0,0]},
+      {png:imgCambio(506,372,cats,m.dias.map(d=>d.cambio)),col:1,row:31,dx:0,dy:6,to:[8,49,0,0]},
+    ];
+    if(mo.length) list.push({png:imgHoriz(514,372,'Registros por motivo',mo.map(x=>x[0]),mo.map(x=>x[1])),col:8,row:31,dx:12,dy:6,to:[16,49,0,0]});
+    charts[idxD]=list;
+  }
+
+  function hojaResumen(wb,lista,usadas,charts){
+    const X=window.XLSX; const sh=hoja('Resumen del equipo','',usadas);
+    const aoa=[['Resumen del equipo'],['Del '+fdm(DESDE)+' al '+fdm(HASTA)],[],['Trabajador','Registros','Días activos','Promedio por día activo','Días con meta ('+META+')']];
+    lista.forEach(x=>aoa.push([cap(x.u),x.m.total,x.m.activos,Math.round(x.m.prom*10)/10,x.m.conMeta]));
+    aoa.push(['Total',lista.reduce((a,x)=>a+x.m.total,0)]);
+    const ws=X.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:22},{wch:11},{wch:12},{wch:22},{wch:18}];
+    X.utils.book_append_sheet(wb,ws,sh);
+    if(lista.length){ const hh=Math.max(260,90+lista.length*38); charts[wb.SheetNames.length]=[{png:imgHoriz(560,hh,'Registros por trabajador',lista.map(x=>cap(x.u)),lista.map(x=>x.m.total)),col:6,row:1,dx:0,dy:0,w:560,h:hh}]; }
+  }
+
+  // ---------- estilos y hoja Dashboard con diseño oscuro ----------
+  function agregarEstilos(sx){
+    const C={bg:'100D1C',tile:'1C1730',hdr:'241D3D',line:'2C2440',txt:'E9E9ED',mut:'A6A3B3',vio:'A48CFF',grn:'34D399',red:'F87171',amb:'F5B83D',okBg:'17372C',noBg:'3D1B25',naBg:'2A2440',regBg:'5B3FD6'};
+    const fonts=[], fills=[], xfs=[];
+    const F=(sz,col,b)=>{ fonts.push('<font>'+(b?'<b/>':'')+'<sz val="'+sz+'"/><color rgb="FF'+col+'"/><name val="Calibri"/><family val="2"/></font>'); return fonts.length-1; };
+    const P=col=>{ fills.push('<fill><patternFill patternType="solid"><fgColor rgb="FF'+col+'"/><bgColor indexed="64"/></patternFill></fill>'); return fills.length-1; };
+    const nF=+(sx.match(/<fonts count="(\d+)"/)||[0,0])[1], nP=+(sx.match(/<fills count="(\d+)"/)||[0,0])[1], nB=+(sx.match(/<borders count="(\d+)"/)||[0,0])[1], nX=+(sx.match(/<cellXfs count="(\d+)"/)||[0,0])[1];
+    const fp={bg:P(C.bg),tile:P(C.tile),hdr:P(C.hdr),ok:P(C.okBg),no:P(C.noBg),na:P(C.naBg),reg:P(C.regBg)};
+    const ff={title:F(20,C.txt,1),sub:F(10,C.mut),lbl:F(9,C.mut,1),vW:F(26,C.txt,1),vV:F(26,C.vio,1),vG:F(26,C.grn,1),vR:F(26,C.red,1),vA:F(26,C.amb,1),sm:F(9,C.mut),sec:F(12,C.txt,1),cell:F(10,C.txt),cellB:F(10,C.txt,1),pos:F(10,C.grn,1),neg:F(10,C.red,1),ok:F(9,'8FE0BC',1),no:F(9,'F4A39C',1),na:F(9,C.mut,1),reg:F(11,'FFFFFF',1)};
+    const bord='<border><left/><right/><top/><bottom style="thin"><color rgb="FF'+C.line+'"/></bottom><diagonal/></border>';
+    const S={};
+    const X_=(name,font,fill,brd,al)=>{ xfs.push('<xf numFmtId="0" fontId="'+(nF+font)+'" fillId="'+(nP+fill)+'" borderId="'+(brd?nB:0)+'" xfId="0" applyFont="1" applyFill="1"'+(brd?' applyBorder="1"':'')+' applyAlignment="1"><alignment '+al+'/></xf>'); S[name]=nX+xfs.length-1; };
+    X_('bg',ff.cell,fp.bg,0,'vertical="center"');
+    X_('title',ff.title,fp.bg,0,'vertical="center"'); X_('sub',ff.sub,fp.bg,0,'vertical="top"');
+    X_('lbl',ff.lbl,fp.tile,0,'horizontal="left" vertical="bottom" indent="1"');
+    ['vW','vV','vG','vR','vA'].forEach(k=>X_(k,ff[k],fp.tile,0,'horizontal="left" vertical="center" indent="1"'));
+    X_('tsub',ff.sm,fp.tile,0,'horizontal="left" vertical="top" indent="1"');
+    X_('sec',ff.sec,fp.bg,0,'vertical="center"');
+    X_('th',ff.lbl,fp.hdr,1,'horizontal="center" vertical="center"');
+    X_('td',ff.cell,fp.tile,1,'horizontal="center" vertical="center"'); X_('tdL',ff.cellB,fp.tile,1,'horizontal="left" vertical="center" indent="1"');
+    X_('pos',ff.pos,fp.tile,1,'horizontal="center" vertical="center"'); X_('neg',ff.neg,fp.tile,1,'horizontal="center" vertical="center"'); X_('neu',ff.sm,fp.tile,1,'horizontal="center" vertical="center"');
+    X_('ok',ff.ok,fp.ok,1,'horizontal="center" vertical="center"'); X_('no',ff.no,fp.no,1,'horizontal="center" vertical="center"'); X_('na',ff.na,fp.na,1,'horizontal="center" vertical="center"');
+    X_('reg',ff.reg,fp.reg,0,'horizontal="left" vertical="center" indent="1"');
+    const fB=P('221C36');
+    X_('rA',ff.cell,fp.tile,1,'horizontal="left" vertical="center" indent="1"'); X_('rB',ff.cell,fB,1,'horizontal="left" vertical="center" indent="1"');
+    const X49=(name,fill)=>{ xfs.push('<xf numFmtId="49" fontId="'+(nF+ff.cellB)+'" fillId="'+(nP+fill)+'" borderId="'+nB+'" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" indent="1"/></xf>'); S[name]=nX+xfs.length-1; };
+    X49('rAc',fp.tile); X49('rBc',fB);
+    X_('rtit',ff.title,fp.bg,0,'vertical="center"'); X_('rsub',ff.sub,fp.bg,0,'vertical="center"');
+    sx=sx.replace(/<fonts count="\d+">([\s\S]*?)<\/fonts>/,(a,b)=>'<fonts count="'+(nF+fonts.length)+'">'+b+fonts.join('')+'</fonts>');
+    sx=sx.replace(/<fills count="\d+">([\s\S]*?)<\/fills>/,(a,b)=>'<fills count="'+(nP+fills.length)+'">'+b+fills.join('')+'</fills>');
+    sx=sx.replace(/<borders count="\d+">([\s\S]*?)<\/borders>/,(a,b)=>'<borders count="'+(nB+1)+'">'+b+bord+'</borders>');
+    sx=sx.replace(/<cellXfs count="\d+">([\s\S]*?)<\/cellXfs>/,(a,b)=>'<cellXfs count="'+(nX+xfs.length)+'">'+b+xfs.join('')+'</cellXfs>');
+    return {sx,S};
+  }
+  function hojaDashboardXml(d,S,conDibujo){
+    const m=d.m, u=d.u, NC=26;
+    const rows={}; const merges=[]; const hts={};
+    const put=(r,c,v,st)=>{ (rows[r]=rows[r]||{})[c]={v,st}; };
+    const tile=(c0,r0,lbl,val,vst,sub)=>{ for(let rr=r0;rr<r0+3;rr++) for(let cc=c0;cc<c0+3;cc++) put(rr,cc,'',rr===r0?'lbl':rr===r0+1?vst:'tsub');
+      put(r0,c0,lbl,'lbl'); put(r0+1,c0,val,vst); put(r0+2,c0,sub,'tsub');
+      for(let k=0;k<3;k++) merges.push(colL(c0)+(r0+k+1)+':'+colL(c0+2)+(r0+k+1)); };
+    hts[0]=10; hts[1]=34; hts[2]=18; hts[3]=12;
+    put(1,1,'Dashboard de '+cap(u),'title'); put(2,1,'Del '+fdm(DESDE)+' al '+fdm(HASTA)+'   ·   meta diaria: '+META+' registros   ·   Andes Panda','sub');
+    const pct=m.activos?Math.round(m.conMeta/m.activos*100):0;
+    const T=[1,5,9,13];
+    [4,8].forEach(r=>{ hts[r]=20; hts[r+1]=40; hts[r+2]=20; }); hts[7]=10; hts[11]=12;
+    tile(T[0],4,'REGISTROS',m.total,'vV','en el periodo');
+    tile(T[1],4,'PROMEDIO POR DÍA',Math.round(m.prom*10)/10,'vW',m.activos+' días activos');
+    tile(T[2],4,'DÍAS CON META',m.conMeta+' de '+m.activos,m.conMeta?'vG':'vA','meta: '+META+' por día');
+    tile(T[3],4,'% DÍAS CON META',pct+'%',pct>=50?'vG':'vA','de los días activos');
+    tile(T[0],8,'DÍAS QUE SUBIÓ',m.subio+' ↑','vG','comparado con el día anterior');
+    tile(T[1],8,'DÍAS QUE BAJÓ',m.bajo+' ↓','vR','comparado con el día anterior');
+    tile(T[2],8,'MEJOR DÍA',m.mejor?m.mejor.n:'—','vV',m.mejor?fdm(m.mejor.f).slice(0,5)+' · '+dia(m.mejor.f):'');
+    tile(T[3],8,'DÍA MÁS BAJO',m.peor?m.peor.n:'—','vA',m.peor?fdm(m.peor.f).slice(0,5)+' · '+dia(m.peor.f):'');
+    // tabla por día debajo de los gráficos
+    let r=52; hts[r]=26; put(r,1,'Detalle por día','sec'); r++;
+    const cols=[[1,'FECHA'],[5,'REGISTROS'],[9,'¿CUMPLIÓ LA META?'],[13,'VS DÍA ANTERIOR']];
+    hts[r]=22; cols.forEach(([c,h])=>{ for(let k=0;k<3;k++) put(r,c+k,'', 'th'); put(r,c,h,'th'); merges.push(colL(c)+(r+1)+':'+colL(c+2)+(r+1)); }); r++;
+    m.dias.forEach(x=>{ hts[r]=20;
+      const vals=[[fdm(x.f).slice(0,5)+'  ·  '+dia(x.f),'tdL'],[x.n,'td'],[x.n>=META?'Sí  (+'+(x.n-META)+')':(x.n?'No  ('+(x.n-META)+')':'Sin registros'),x.n>=META?'ok':(x.n?'no':'na')],[x.cambio===null?'—':(x.cambio>0?'▲ +'+x.cambio:x.cambio<0?'▼ '+x.cambio:'= 0'),x.cambio>0?'pos':x.cambio<0?'neg':'neu']];
+      cols.forEach(([c],i)=>{ for(let k=0;k<3;k++) put(r,c+k,'',vals[i][1]); put(r,c,vals[i][0],vals[i][1]); merges.push(colL(c)+(r+1)+':'+colL(c+2)+(r+1)); }); r++; });
+    const last=Math.max(r+3,60);
+    const widths=[2.5,11,11,11,1.8,11,11,11,1.8,11,11,11,1.8,11,11,11,2.5];
+    let x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+    x+='<sheetPr><tabColor rgb="FF7C5CFF"/></sheetPr><dimension ref="A1:'+colL(NC-1)+(last+1)+'"/><sheetViews><sheetView showGridLines="0" workbookViewId="0" zoomScale="90" zoomScaleNormal="90"/></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>';
+    for(let c=0;c<NC;c++) x+='<col min="'+(c+1)+'" max="'+(c+1)+'" width="'+(widths[c]||11)+'" customWidth="1" style="'+S.bg+'"/>';
+    x+='<col min="'+(NC+1)+'" max="16384" width="9" style="'+S.bg+'"/></cols><sheetData>';
+    for(let rr=0;rr<=last;rr++){
+      x+='<row r="'+(rr+1)+'"'+(hts[rr]?' ht="'+hts[rr]+'" customHeight="1"':'')+' s="'+S.bg+'" customFormat="1">';
+      for(let c=0;c<NC;c++){ const cell=rows[rr]&&rows[rr][c]; const ref=colL(c)+(rr+1); const st=cell?S[cell.st]:S.bg;
+        if(!cell||cell.v===''||cell.v===null||cell.v===undefined) x+='<c r="'+ref+'" s="'+st+'"/>';
+        else if(typeof cell.v==='number') x+='<c r="'+ref+'" s="'+st+'"><v>'+cell.v+'</v></c>';
+        else x+='<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+xe(cell.v)+'</t></is></c>'; }
+      x+='</row>'; }
+    x+='</sheetData><mergeCells count="'+merges.length+'">'+merges.map(mm=>'<mergeCell ref="'+mm+'"/>').join('')+'</mergeCells>';
+    x+='<pageMargins left="0.3" right="0.3" top="0.3" bottom="0.3" header="0" footer="0"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
+    if(conDibujo) x+='<drawing r:id="rIdDr1"/>';
+    return x+'</worksheet>';
+  }
+
+  function hojaRegistroXml(reg,S){
+    const W=[13,24,28,42,11];
+    let x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+    x+='<sheetPr><tabColor rgb="FF5B3FD6"/></sheetPr><dimension ref="A1:E'+Math.max(1,reg.length)+'"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>';
+    W.forEach((w,c)=>x+='<col min="'+(c+1)+'" max="'+(c+1)+'" width="'+w+'" customWidth="1" style="'+S.bg+'"/>');
+    x+='<col min="6" max="16384" width="9" style="'+S.bg+'"/></cols><sheetData>';
+    reg.forEach((row,i)=>{ const hdr=i===0; const alt=i%2?'rA':'rB';
+      x+='<row r="'+(i+1)+'" ht="'+(hdr?24:19)+'" customHeight="1">';
+      for(let c=0;c<5;c++){ const v=row[c]; const st=hdr?S.reg:S[c===1?alt+'c':alt]; const ref=colL(c)+(i+1);
+        if(v===''||v===null||v===undefined) x+='<c r="'+ref+'" s="'+st+'"/>';
+        else x+='<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+xe(v)+'</t></is></c>'; }
+      x+='</row>'; });
+    x+='</sheetData><pageMargins left="0.3" right="0.3" top="0.3" bottom="0.3" header="0" footer="0"/></worksheet>';
+    return x;
+  }
+
+  async function inyectarGraficos(buf,charts,meta){
+    const zip=await window.JSZip.loadAsync(buf);
+    meta=meta||{};
+    let est=null;
+    if((meta.dash&&Object.keys(meta.dash).length)||(meta.reg&&Object.keys(meta.reg).length)){
+      const r=agregarEstilos(await zip.file('xl/styles.xml').async('string')); zip.file('xl/styles.xml',r.sx); est=r.S;
+      for(const [idx,d] of Object.entries(meta.dash||{})) zip.file('xl/worksheets/sheet'+idx+'.xml',hojaDashboardXml(d,est,!!(charts[idx]&&charts[idx].length)));
+      for(const [idx,reg] of Object.entries(meta.reg||{})) zip.file('xl/worksheets/sheet'+idx+'.xml',hojaRegistroXml(reg,est));
+    }
+    let ct=await zip.file('[Content_Types].xml').async('string');
+    let nChart=0,nDraw=0,nImg=0; const add=[];
+    for(const [idx,list] of Object.entries(charts)){
+      if(!list||!list.length) continue;
+      nDraw++; const dn=nDraw;
+      let anchors='', drels='';
+      list.forEach((ch,i)=>{
+        if(ch.png){ nImg++; const im=nImg; zip.file('xl/media/grafico'+im+'.png',ch.png);
+          drels+='<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/grafico'+im+'.png"/>';
+          const E=9525;
+          if(ch.to){ const T=ch.to;
+            anchors+='<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>'+ch.col+'</xdr:col><xdr:colOff>'+(ch.dx*E)+'</xdr:colOff><xdr:row>'+ch.row+'</xdr:row><xdr:rowOff>'+(ch.dy*E)+'</xdr:rowOff></xdr:from><xdr:to><xdr:col>'+T[0]+'</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+T[1]+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(i+2)+'" name="Grafico '+(i+1)+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId'+(i+1)+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>';
+            return; }
+          const cx=ch.w*E, cy=ch.h*E;
+          anchors+='<xdr:oneCellAnchor><xdr:from><xdr:col>'+ch.col+'</xdr:col><xdr:colOff>'+(ch.dx*E)+'</xdr:colOff><xdr:row>'+ch.row+'</xdr:row><xdr:rowOff>'+(ch.dy*E)+'</xdr:rowOff></xdr:from><xdr:ext cx="'+cx+'" cy="'+cy+'"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(i+2)+'" name="Grafico '+(i+1)+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId'+(i+1)+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+          return; }
+        nChart++; const cn=nChart;
+        zip.file('xl/charts/chart'+cn+'.xml',ch.xml);
+        add.push('<Override PartName="/xl/charts/chart'+cn+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>');
+        drels+='<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart'+cn+'.xml"/>';
+        anchors+='<xdr:twoCellAnchor editAs="oneCell"><xdr:from><xdr:col>'+ch.from[0]+'</xdr:col><xdr:colOff>'+(ch.from[2]||0)+'</xdr:colOff><xdr:row>'+ch.from[1]+'</xdr:row><xdr:rowOff>'+(ch.from[3]||0)+'</xdr:rowOff></xdr:from><xdr:to><xdr:col>'+ch.to[0]+'</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+ch.to[1]+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="'+(i+2)+'" name="Grafico '+(i+1)+'"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId'+(i+1)+'"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>';
+      });
+      zip.file('xl/drawings/drawing'+dn+'.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+anchors+'</xdr:wsDr>');
+      zip.file('xl/drawings/_rels/drawing'+dn+'.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+drels+'</Relationships>');
+      add.push('<Override PartName="/xl/drawings/drawing'+dn+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>');
+      const sp='xl/worksheets/sheet'+idx+'.xml';
+      if(!(meta.dash&&meta.dash[idx])){ let sx=await zip.file(sp).async('string'); sx=sx.replace('</worksheet>','<drawing r:id="rIdDr1"/></worksheet>'); zip.file(sp,sx); }
+      const rp='xl/worksheets/_rels/sheet'+idx+'.xml.rels'; const rel='<Relationship Id="rIdDr1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing'+dn+'.xml"/>';
+      if(zip.file(rp)){ let rx=await zip.file(rp).async('string'); zip.file(rp,rx.replace('</Relationships>',rel+'</Relationships>')); }
+      else zip.file(rp,'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rel+'</Relationships>');
+    }
+    ct=ct.replace('</Types>',add.join('')+'</Types>'); zip.file('[Content_Types].xml',ct);
+    Object.keys(zip.files).forEach(k=>{ if(zip.files[k].dir) delete zip.files[k]; });
+    return zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  }
+
+  async function guardar(blob,nombre){
+    let dl=null; try{ dl=await window.claude?.use?.('downloads'); }catch(e){}
+    if(!dl&&window.__shim) try{ dl=await window.__shim.use('downloads'); }catch(e){}
+    if(dl&&dl!==null){ try{ await dl.save({filename:nombre,data:blob}); return true; }catch(e){ if(e&&e.code==='declined') return false; } }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nombre; document.body.appendChild(a); a.click(); a.remove(); return true;
+  }
+
+  async function exportar(usuarios){
+    if(!window.XLSX||!window.JSZip){ $('admstat').textContent='Falta cargar el generador de Excel. Recarga la página.'; return; }
+    const pu=porUsuario(); const X=window.XLSX; const wb=X.utils.book_new(); const usadas=new Set(); const charts={};
+    const lista=usuarios.map(u=>({u,rs:pu.get(u)||[]})).map(x=>Object.assign(x,{m:metricas(x.rs,DESDE,HASTA)})).sort((a,b)=>b.m.total-a.m.total);
+    if(usuarios.length>1) hojaResumen(wb,lista,usadas,charts);
+    lista.forEach(x=>hojasPersona(wb,x.u,x.rs,usadas,charts,lista.length===1));
+    wb.Workbook={Sheets:wb.SheetNames.map(n=>({Hidden:wb.__ocultas&&wb.__ocultas.has(n)?1:0}))};
+    const buf=X.write(wb,{type:'array',bookType:'xlsx'});
+    const blob=await inyectarGraficos(buf,charts,{dash:wb.__dash});
+    const nom=(usuarios.length>1?'equipo':usuarios[0]).replace(/[^\w\-]+/g,'_');
+    await guardar(blob,'registros_'+nom+'_'+DESDE+'_a_'+HASTA+'.xlsx');
+  }
+  window.__adminExport=exportar;
+
+  // ---- Excel con dashboard para el propio trabajador (botones Semana / Mes / Historial) ----
+  async function exportarPropio(tipo){
+    const st=document.querySelector('.status'); const aviso=t=>{ if(window.toast) window.toast(t); else if(st) st.textContent=t; };
+    if(!window.XLSX||!window.JSZip){ aviso('Falta cargar el generador de Excel. Recarga la página.'); return; }
+    const u=window.__reg.user(); if(!u) return;
+    const f=($('fecha')&&$('fecha').value)||iso(new Date()); const base=new Date(f+'T12:00:00'); let d1,d2;
+    if(tipo==='dia'){ d1=new Date(base); d2=new Date(base); }
+    else if(tipo==='sem'){ d1=new Date(base); d1.setDate(base.getDate()-((base.getDay()+6)%7)); d2=new Date(d1); d2.setDate(d1.getDate()+6); }
+    else if(tipo==='mes'){ d1=new Date(base.getFullYear(),base.getMonth(),1); d2=new Date(base.getFullYear(),base.getMonth()+1,0); }
+    else { d1=new Date(2000,0,1); d2=new Date(); }
+    let rs=[]; try{ rs=(await window.__reg.rpc('reg_list',{p_code:window.__reg.code(),p_user:u,p_desde:iso(d1),p_hasta:iso(d2)}))||[]; }catch(e){ aviso('No se pudieron leer tus registros. Revisa tu conexión.'); return; }
+    if(!rs.length){ aviso('No tienes registros en ese periodo.'); return; }
+    rs=rs.map(r=>Object.assign({usuario:u},r)).sort((a,b)=>a.fecha<b.fecha?-1:a.fecha>b.fecha?1:((a.ts||'')<(b.ts||'')?-1:1));
+    const sD=DESDE,sH=HASTA,sR=ROWS;
+    DESDE=tipo==='hist'?rs[0].fecha:iso(d1); HASTA=iso(d2); ROWS=rs;
+    try{ await exportar([u]); } finally { DESDE=sD; HASTA=sH; ROWS=sR; }
+  }
+  // ---- Modo prueba: botón para llenar 40 registros del día en la cuenta actual ----
+  function montarPrueba(){
+    if(!(window.REGISTRO_CONFIG&&window.REGISTRO_CONFIG.url==='local')) return;
+    const d=$('expday'); if(!d||$('llenar40')) return;
+    const host=d.closest('.panel,section,.toolbar')||d.parentElement;
+    const p=document.createElement('p'); p.className='admdemo'; p.style.margin='0';
+    p.innerHTML='Modo prueba: <button type="button" class="btn" id="llenar40">Llenar 40 registros de prueba</button> los agrega al día que estás viendo.';
+    p.style.cssText='margin:0;padding:10px 14px;border:1px dashed #5b3fd6;border-radius:10px;font-size:13px;color:#a6a3b3;display:flex;flex-wrap:wrap;align-items:center;gap:8px';
+    host.after(p);
+    $('llenar40').onclick=async()=>{
+      const bt=$('llenar40'); bt.disabled=true; bt.textContent='Llenando…';
+      const u=window.__reg.user(); const f=($('fecha')&&$('fecha').value)||iso(new Date());
+      const base=window.__BASE__||[]; const mots=['Reporte de métricas','Inscripción de evento','Seguimiento de live','Resolución de dudas','Bienvenida a la agencia',''];
+      const ya=new Set(((await window.__reg.rpc('reg_list',{p_code:window.__reg.code(),p_user:u,p_desde:f,p_hasta:f}))||[]).map(r=>String(r.nombre).toLowerCase()));
+      const ups=[]; const usados=new Set(); const t0=new Date(f+'T09:00:00');
+      while(ups.length<40&&usados.size<base.length){ const b=base[Math.floor(Math.random()*base.length)]; const n=String(b[0]).toLowerCase(); if(usados.has(n)||ya.has(n)) { usados.add(n); continue; } usados.add(n);
+        const t=new Date(t0.getTime()+ups.length*9*60000); ups.push({id:'p40'+Date.now().toString(36)+ups.length,nombre:b[0],codigo:String(b[1]||''),motivo:mots[ups.length%mots.length],ts:t.toISOString()}); }
+      await window.__reg.rpc('reg_apply',{p_code:window.__reg.code(),p_user:u,p_fecha:f,p_upserts:ups,p_deletes:[]});
+      location.reload();
+    };
+  }
+  function montarExport(){
+    const d=$('expday'); if(!d||$('expsem')) return;
+    const b=document.createElement('button'); b.className='btn'; b.type='button'; b.id='expsem'; b.textContent='Semana'; d.after(b);
+    const tips={expday:'dia',expsem:'sem',expmes:'mes',exphist:'hist'};
+    Object.entries(tips).forEach(([id,t])=>{ const el=$(id); if(!el) return; el.title='Excel con tus registros y tu dashboard'; el.addEventListener('click',e=>{ e.preventDefault(); e.stopImmediatePropagation(); exportarPropio(t); },true); });
+  }
+
+  // ---- datos de ejemplo (solo modo prueba) ----
+  async function seed(){
+    const base=(window.__BASE__||[]).slice(0,4000); const mots=['Reporte de métricas','Inscripción de evento','Bienvenida a la agencia','Seguimiento de live','Resolución de dudas',''];
+    const quienes={'maria':[28,55],'jose':[15,42],'lucia':[33,50]};
+    const h=new Date(); const d1=new Date(h.getFullYear(),h.getMonth()-1,1);
+    for(const [u,[mn,mx]] of Object.entries(quienes)){
+      for(let d=new Date(d1); iso(d)<=iso(h); d.setDate(d.getDate()+1)){
+        if(d.getDay()===0) continue; const f=iso(d); const n=mn+Math.floor(Math.random()*(mx-mn+1)); const ups=[];
+        for(let i=0;i<n;i++){ const b=base[Math.floor(Math.random()*base.length)]||['creador','']; const t=new Date(d); t.setHours(9+Math.floor(i/6),(i*7)%60); ups.push({id:'ej'+u+f+i,nombre:b[0],codigo:String(b[1]||''),motivo:mots[Math.floor(Math.random()*mots.length)],ts:t.toISOString()}); }
+        await window.__reg.rpc('reg_apply',{p_code:window.__reg.code(),p_user:u,p_fecha:f,p_upserts:ups,p_deletes:[]});
+      }
+    }
+    cargar();
+  }
+
+  // ---- entrada de administrador ----
+  function montarLogin(){
+    const form=$('loginform'); if(!form||$('loginadm')) return;
+    const b=document.createElement('button'); b.type='button'; b.id='loginadm'; b.className='loginadm'; b.textContent='Entrar como administrador';
+    form.appendChild(b);
+    let modoAdm=false; const un=$('loginuser'); const err=$('loginerr'); const btn=form.querySelector('button[type=submit],.btn.primary');
+    const pw=document.createElement('input'); pw.type='password'; pw.id='loginpass'; pw.placeholder='Clave de administrador'; pw.autocomplete='current-password'; pw.setAttribute('aria-label','Clave de administrador'); pw.hidden=true;
+    un.after(pw);
+    const orig=form.onsubmit;
+    b.onclick=()=>{ modoAdm=!modoAdm; un.hidden=modoAdm; pw.hidden=!modoAdm; b.textContent=modoAdm?'Volver: entrar como trabajador':'Entrar como administrador'; if(btn) btn.textContent=modoAdm?'Entrar al panel':'Entrar'; err.textContent=''; (modoAdm?pw:un).focus(); };
+    form.addEventListener('submit',async e=>{
+      if(!modoAdm) return; e.preventDefault(); e.stopImmediatePropagation();
+      const p=pw.value; if(!p){ err.textContent='Escribe la clave.'; return; }
+      err.textContent='Verificando…';
+      let ok=false; try{ ok=await window.__reg.rpc('reg_admin_check',{p_code:window.__reg.code(),p_pass:p})===true; }catch(_){}
+      if(!ok){ err.textContent='Clave incorrecta.'; return; }
+      PASS=p; err.textContent=''; pw.value='';
+      $('login').hidden=true; const uc=$('userchip'); if(uc) uc.hidden=true; const rk=$('ranking'); if(rk) rk.hidden=true;
+      $('admin').hidden=false; $('admdemo').hidden=!(window.REGISTRO_CONFIG&&window.REGISTRO_CONFIG.url==='local');
+      setRango('sem');
+    },true);
+  }
+  document.addEventListener('DOMContentLoaded',()=>{
+    montarLogin(); montarExport(); montarPrueba();
+    document.querySelectorAll('#admchips button').forEach(b=>b.onclick=()=>setRango(b.dataset.r));
+    $('admver').onclick=()=>{ document.querySelectorAll('#admchips button').forEach(b=>b.classList.remove('on')); cargar(); };
+    $('admexpall').onclick=async()=>{ const us=[...porUsuario().keys()]; if(us.length) await exportar(us); };
+    $('admexpone').onclick=async()=>{ if(SEL) await exportar([SEL]); };
+    $('admseed').onclick=async()=>{ $('admseed').disabled=true; $('admseed').textContent='Cargando…'; await seed(); $('admseed').textContent='Datos cargados'; };
+    $('admsalir').onclick=()=>{ PASS=null; location.reload(); };
+  });
 })();
 </script>
 
