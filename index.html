@@ -383,7 +383,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   const CFG=window.REGISTRO_CONFIG;
   const LS='registroCodigoEquipo';
   const LU='registroUsuario';
-  const CODE='panda-mrcapj'; let USER=null; try{ USER=localStorage.getItem(LU); }catch(e){}
+  const CODE='panda-mrcapj'; let USER=null; try{ localStorage.removeItem(LU); }catch(e){}
   const headers=()=>{ const h={'apikey':CFG.key,'Content-Type':'application/json'}; if(/^eyJ/.test(CFG.key)) h['Authorization']='Bearer '+CFG.key; return h; };
   async function rpc(fn,args){ if(CFG.url==='local') return rpcLocal(fn,args); return rpcRemota(fn,args); }
   // ---- modo local (prueba): todo se guarda solo en este navegador ----
@@ -482,13 +482,13 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       e.preventDefault(); const u=un.value.trim().toLowerCase();
       if(!u){ err.textContent='Escribe tu nombre.'; un.focus(); return; }
       err.textContent='Verificando…';
-      if(await probar()){ USER=u; try{ localStorage.setItem(LU,u); }catch(_){} ov.hidden=true; mostrarUsuario(); resolveLogin(); }
+      if(await probar()){ USER=u; ov.hidden=true; mostrarUsuario(); resolveLogin(); }
       else err.textContent='Sin conexión. Intenta de nuevo.';
     };
   }
   document.addEventListener('DOMContentLoaded',async()=>{
     if(!CFG.url||CFG.url.includes('__SUPABASE')){ pedirCodigo('Falta configurar Supabase en el archivo (REGISTRO_CONFIG).'); return; }
-    if(USER&&await probar()){ mostrarUsuario(); resolveLogin(); } else pedirCodigo();
+    pedirCodigo();
   });
   window.claude={use:async n=>{ if(n==='db'){ await loggedIn; return db; } if(n==='downloads') return downloads; return null; }};
   function mostrarUsuario(){ const el=document.getElementById('userchip'); if(!el) return; el.querySelector('b').textContent=USER; el.hidden=false; if(window.iniciarRanking) window.iniciarRanking(); }
