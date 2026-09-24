@@ -398,6 +398,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       (a.p_upserts||[]).forEach(up=>{ const i=d.r.findIndex(x=>x.usuario===u&&x.id===up.id); const row={usuario:u,fecha:a.p_fecha,id:up.id,nombre:up.nombre,codigo:up.codigo||'',motivo:up.motivo||'',ts:up.ts||null}; if(i>=0) d.r[i]=Object.assign(d.r[i],{nombre:row.nombre,codigo:row.codigo,motivo:row.motivo}); else d.r.push(row); });
       lsave(d); return null; }
     if(fn==='reg_ranking'){ const c={}; d.r.forEach(x=>{ if(x.fecha>=a.p_desde&&x.fecha<=a.p_hasta) c[x.usuario]=(c[x.usuario]||0)+1; }); return Object.entries(c).sort((x,y)=>y[1]-x[1]||(x[0]<y[0]?-1:1)).map(([usuario,total])=>({usuario,total})); }
+    if(fn==='reg_user_ok') return u!=='admin123';
     if(fn==='reg_admin_check') return a.p_pass==='admin123';
     if(fn==='reg_admin_list'){ if(a.p_pass!=='admin123') throw {code:'invalid_argument',message:'clave'}; return d.r.filter(x=>(!a.p_user||x.usuario===a.p_user)&&x.fecha>=a.p_desde&&x.fecha<=a.p_hasta).map(x=>Object.assign({},x)); }
     if(fn==='reg_kv_get') return d.kv[a.p_clave]??null;
@@ -482,7 +483,10 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       e.preventDefault(); const u=un.value.trim().toLowerCase();
       if(!u){ err.textContent='Escribe tu nombre.'; un.focus(); return; }
       err.textContent='Verificando…';
-      if(await probar()){ USER=u; ov.hidden=true; mostrarUsuario(); resolveLogin(); }
+      if(await probar()){
+        let libre=true; try{ libre=await rpc('reg_user_ok',{p_code:CODE,p_user:u})!==false; }catch(_){}
+        if(!libre){ err.textContent='Ese nombre no se puede usar. Si eres administrador, toca «Entrar como administrador».'; un.value=''; un.focus(); return; }
+        USER=u; ov.hidden=true; mostrarUsuario(); resolveLogin(); }
       else err.textContent='Sin conexión. Intenta de nuevo.';
     };
   }
