@@ -32,7 +32,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
 :root{
   --ground:#F4F6FA; --surface:#FFFFFF; --sunk:#EBEEF5; --ink:#1A1E2C; --muted:#5D6478; --line:#D8DDE8;
@@ -216,6 +216,45 @@ tr.missing td.cod{box-shadow:inset 3px 0 0 var(--warn)}
 #dupout{display:grid;gap:18px}
 @media (max-width:520px){ td.t{display:none} th.t{display:none} .fix input{width:140px} }
 @media (prefers-reduced-motion:no-preference){ .toast{transition:opacity .2s} }
+
+/* ===== Tema nocturno (colores Noctu) ===== */
+html:root{color-scheme:dark;
+  --ground:#0d0a14 !important; --surface:#191526 !important; --sunk:#14111f !important; --ink:#e9e9ed !important; --muted:#a6a3b3 !important; --line:#2c2440 !important;
+  --accent:#9184d9 !important; --accent-ink:#0d0a14 !important; --accent-soft:#2a2150 !important;
+  --grad:linear-gradient(100deg,#c4b8ff 0%,#9a82ff 45%,#7c5cff 100%) !important;
+  --warn:#D8B24A !important; --warn-soft:#3A3120 !important; --warn-ink:#F2D98E !important;
+  --ok:#6CC49A !important; --danger:#F08A82 !important;
+  --display:"Inter", ui-sans-serif, system-ui, sans-serif !important;
+  --body:"Inter", ui-sans-serif, system-ui, sans-serif !important;
+}
+body{background:radial-gradient(130% 90% at 50% -20%, #2a1f52 0%, #150f28 30%, #0d0a14 62%) fixed,#0d0a14 !important;-webkit-font-smoothing:antialiased}
+.panel,.loginov .logincard{background:rgb(25 21 38 / .82);backdrop-filter:blur(6px)}
+.panel{box-shadow:0 0 0 1px rgb(124 92 255 / .04),0 10px 30px rgb(0 0 0 / .25)}
+h1{letter-spacing:-.02em}
+.topbar{background:linear-gradient(90deg,transparent,#7c5cff,transparent)!important;height:2px;box-shadow:0 0 18px #7c5cff}
+.btn{background:#14111f;border-color:#2c2440}
+.btn:hover{border-color:#5b3fd6;background:#201a30}
+.btn.primary{background:linear-gradient(135deg,#7c5cff,#5b3fd6)!important;box-shadow:0 0 18px rgb(124 92 255 / .35);text-shadow:none}
+.btn.primary:hover{filter:brightness(1.12)}
+.btn.dup{background:linear-gradient(135deg,#41308f,#191526)!important;border-color:#5b3fd6!important;box-shadow:0 0 14px rgb(124 92 255 / .25)!important}
+.btn.dup:hover{filter:brightness(1.15)}
+input[type=date],input[type=text],input[type=password],textarea{background:#14111f!important;border-color:#2c2440!important}
+input::placeholder,textarea::placeholder{color:#6f6c80}
+input:focus-visible,textarea:focus-visible,button:focus-visible{outline-color:#7c5cff!important}
+.metafill{box-shadow:0 0 12px rgb(124 92 255 / .6)}
+tr.dup td{background:#2E2250!important}
+tr.dup td.n{box-shadow:inset 3px 0 0 #9a82ff!important;color:#c4b8ff!important}
+.bst.ok{background:#1E3A30!important;color:#8FE0BC!important}
+.bst.ya{background:#2E2250!important;color:#CDB5F5!important}
+.sev.alta{background:#3f1a1a!important;color:#F4A39C!important}
+.meta.done .metatop #metapct{color:#c4b8ff!important}
+.celebra{background:rgb(5 3 10 / .65)!important}
+.sugg{background:#191526!important;box-shadow:0 12px 30px rgb(0 0 0 / .5)!important}
+tbody tr:hover td{background:#201a30}
+.userchip{background:#191526!important;border-color:#2c2440!important;box-shadow:0 0 14px rgb(124 92 255 / .2)!important}
+.userchip button{background:#2a2150!important}
+.toast{background:linear-gradient(135deg,#41308f,#201a30)!important;color:#e9e9ed!important;border:1px solid #5b3fd6;box-shadow:0 0 20px rgb(124 92 255 / .35)}
+.loginov{background:radial-gradient(130% 90% at 50% -20%, #2a1f52 0%, #150f28 30%, #0d0a14 62%),#0d0a14!important}
 </style>
 
 <div class="wrap">
