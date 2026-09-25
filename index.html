@@ -120,6 +120,11 @@ tr:last-child td{border-bottom:0}
 td.n{color:var(--muted);font-variant-numeric:tabular-nums;width:36px}
 td.t{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:13px}
 td.act{text-align:right;white-space:nowrap;width:1%}
+tr.editing td{background:var(--accent-soft);vertical-align:top}
+tr.editing input{width:100%;min-width:120px;padding:6px 8px;font-size:14px}
+tr.editing td.cod input{font-family:var(--mono);min-width:180px}
+tr.editing td.act .btn{padding:6px 12px;font-size:13px;margin-right:4px}
+.edhint{font-size:11px;color:var(--muted);margin-top:3px}
 tr.missing td{background:var(--warn-soft)}
 tr.dup td{background:#EFE6FB}
 tr.dup td.n{box-shadow:inset 3px 0 0 #7A3FD0;color:#7A3FD0;font-weight:700}
@@ -632,8 +637,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     if(fecha!==todayLima()) return;
     let hito=0;
     if(antes<META_MIN&&n>=META_MIN) hito=META_MIN;
-    if(!hito||celebrados().includes(hito)) return;
-    guardarCelebrado(hito);
+    if(!hito) return;
     celebrar(hito);
   }
   function celebrar(h){
@@ -661,10 +665,51 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     })();
   }
   // ---------- render ----------
+  let editId=null;
+  function filaEdicion(r,i){
+    const tr=document.createElement('tr'); tr.className='editing';
+    const td=(cls)=>{const d=document.createElement('td'); if(cls) d.className=cls; tr.appendChild(d); return d;};
+    td('n').textContent=String(i+1);
+    const cod0=r.codigo||lookup(r.nombre)?.codigo||'';
+    const ic=document.createElement('input'); ic.id='edc-'+r.id; ic.value=cod0; ic.inputMode='numeric'; ic.placeholder='ID de creador'; ic.setAttribute('aria-label','ID de creador');
+    const inn=document.createElement('input'); inn.id='edn-'+r.id; inn.value=r.nombre; inn.placeholder='Nombre TikTok'; inn.setAttribute('aria-label','Nombre TikTok'); inn.autocomplete='off';
+    const im=document.createElement('input'); im.id='edm-'+r.id; im.value=r.motivo||''; im.placeholder='Motivo'; im.setAttribute('list','motivos-list'); im.setAttribute('aria-label','Motivo');
+    const hint=document.createElement('div'); hint.className='edhint';
+    let codManual=false; ic.oninput=()=>{ codManual=true; };
+    inn.oninput=()=>{ const f=lookup(inn.value); if(f&&!codManual){ ic.value=f.codigo; hint.textContent='ID encontrado en la base'; } else if(!f){ hint.textContent=inn.value.trim()?'No está en la base: escribe el ID a mano':''; if(!codManual) ic.value=''; } };
+    td('cod').appendChild(ic);
+    const tn=td(''); tn.append(inn,hint);
+    td('mot').appendChild(im);
+    td('t').textContent=hora(r.ts);
+    const a=td('act');
+    const ok=document.createElement('button'); ok.className='btn primary'; ok.type='button'; ok.textContent='Guardar';
+    const no=document.createElement('button'); no.className='x'; no.type='button'; no.textContent='Cancelar';
+    const go=()=>guardarEdicion(r,inn.value,ic.value,im.value);
+    ok.onclick=go; no.onclick=()=>{ editId=null; render(); };
+    [ic,inn,im].forEach(el=>el.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } if(e.key==='Escape'){ editId=null; render(); } });
+    a.append(ok,no);
+    setTimeout(()=>{ inn.focus(); inn.select(); },0);
+    return tr;
+  }
+  async function guardarEdicion(r,nombre,codigo,motivo){
+    const n=String(nombre||'').trim().replace(/^@/,''), c=String(codigo||'').replace(/\s+/g,''), m=String(motivo||'').trim();
+    if(!n){ toast('Escribe el nombre de TikTok.'); return; }
+    if(c&&!isCode(c)){ toast('El ID de creador debe tener entre 15 y 20 dígitos.'); return; }
+    if(rows.some(x=>x.id!==r.id&&norm(x.nombre)===norm(n))){ toast(n+' ya está registrado este día.'); return; }
+    const f=lookup(n); const codGuardar=c&&(!f||f.codigo!==c)?c:(f?'':c);
+    editId=null;
+    try{ await mutateDay(cur=>{ const x=cur.registros.find(q=>q.id===r.id); if(x){ x.nombre=n; x.codigo=codGuardar||(f?f.codigo:''); x.motivo=m; } }); }
+    catch(e){ editId=r.id; render(); writeErr(e); return; }
+    render();
+    if(m) learnMotivo(m);
+    if(c&&(!f||f.codigo!==c)){ try{ const next=JSON.parse(JSON.stringify(extra)); next[norm(n)]={nombre:n,codigo:c}; await db.doc('base/extra').set({items:next}); }catch(e){} }
+    toast('Registro actualizado: '+n);
+  }
   function render(){
     const tb=$('rows'); tb.textContent='';
     let missing=0;
     rows.forEach((r,i)=>{
+      if(editId===r.id&&canWrite){ tb.appendChild(filaEdicion(r,i)); return; }
       const cod=r.codigo||lookup(r.nombre)?.codigo||'';
       if(!cod) missing++;
       const tr=document.createElement('tr'); if(!cod) tr.className='missing'; if(dupKeys.has(norm(r.nombre))) tr.classList.add('dup');
@@ -694,6 +739,9 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       cm.onclick=()=>{ if(r.motivo) copy(r.motivo,'Motivo de '+r.nombre); };
       a.appendChild(cm);
       if(canWrite){
+        const ed=document.createElement('button'); ed.className='x'; ed.type='button'; ed.textContent='Editar'; ed.setAttribute('aria-label','Editar '+r.nombre);
+        ed.onclick=()=>{ editId=r.id; render(); };
+        a.appendChild(ed);
         const x=document.createElement('button'); x.className='x'; x.type='button'; x.textContent='Quitar'; x.setAttribute('aria-label','Quitar '+r.nombre);
         x.onclick=()=>{ if(x.dataset.c){ removeRow(r.id); } else { x.dataset.c='1'; x.textContent='¿Quitar?'; x.classList.add('confirm'); setTimeout(()=>{ if(x.isConnected){ delete x.dataset.c; x.textContent='Quitar'; x.classList.remove('confirm'); } },3000);} };
         a.appendChild(x);
