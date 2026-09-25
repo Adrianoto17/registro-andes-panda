@@ -125,6 +125,7 @@ tr.editing input{width:100%;min-width:120px;padding:6px 8px;font-size:14px}
 tr.editing td.cod input{font-family:var(--mono);min-width:180px}
 tr.editing td.act .btn{padding:6px 12px;font-size:13px;margin-right:4px}
 .edhint{font-size:11px;color:var(--muted);margin-top:3px}
+.edsugg{position:fixed!important;right:auto;z-index:60;max-height:280px}
 tr.missing td{background:var(--warn-soft)}
 tr.dup td{background:#EFE6FB}
 tr.dup td.n{box-shadow:inset 3px 0 0 #7A3FD0;color:#7A3FD0;font-weight:700}
@@ -678,7 +679,28 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     let codManual=false; ic.oninput=()=>{ codManual=true; };
     inn.oninput=()=>{ const f=lookup(inn.value); if(f&&!codManual){ ic.value=f.codigo; hint.textContent='ID encontrado en la base'; } else if(!f){ hint.textContent=inn.value.trim()?'No está en la base: escribe el ID a mano':''; if(!codManual) ic.value=''; } };
     td('cod').appendChild(ic);
-    const tn=td(''); tn.append(inn,hint);
+    const tn=td(''); const wrapN=document.createElement('div'); wrapN.style.position='relative';
+    const box=document.createElement('div'); box.className='sugg edsugg'; box.setAttribute('role','listbox'); box.hidden=true;
+    wrapN.append(inn,box); tn.append(wrapN,hint);
+    let ms=[], es=-1;
+    const elegir=i=>{ const m=ms[i]; if(!m) return; inn.value=m.nombre; box.hidden=true; codManual=false; ic.value=m.codigo||''; hint.textContent=m.codigo?'ID encontrado en la base':'Está en la base pero sin ID: escríbelo a mano'; inn.focus(); };
+    const mostrar=()=>{ const k=norm(inn.value); box.textContent=''; es=-1;
+      if(k.length<2){ box.hidden=true; ms=[]; return; }
+      ms=findMatches(k,60).list.filter(m=>m.nombre.toLowerCase()!==k);
+      if(ms.some(m=>m.parecido)&&!ms.some(m=>!m.parecido)){ const h=document.createElement('div'); h.className='shead'; h.textContent='¿Quisiste decir…?'; box.appendChild(h); }
+      ms.forEach((m,i)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','option'); const a=document.createElement('span'); a.textContent=m.nombre; const c=document.createElement('span'); c.className='code'; c.textContent=m.codigo||'sin código'; b.append(a,c); b.onmousedown=e=>{ e.preventDefault(); elegir(i); }; box.appendChild(b); });
+      if(ms.length){ const rc=inn.getBoundingClientRect(); const abajo=innerHeight-rc.bottom>200; box.style.left=Math.max(8,rc.left)+'px'; box.style.width=Math.max(340,rc.width)+'px'; if(abajo){ box.style.top=(rc.bottom+4)+'px'; box.style.bottom='auto'; } else { box.style.bottom=(innerHeight-rc.top+4)+'px'; box.style.top='auto'; } }
+      box.hidden=!ms.length; };
+    window.addEventListener('scroll',()=>{ box.hidden=true; },{passive:true,capture:true});
+    inn.addEventListener('input',mostrar);
+    inn.addEventListener('focus',mostrar);
+    inn.addEventListener('blur',()=>setTimeout(()=>box.hidden=true,120));
+    inn.addEventListener('keydown',e=>{ if(box.hidden) return; const btns=[...box.querySelectorAll('button')];
+      if(e.key==='ArrowDown'){ e.preventDefault(); e.stopImmediatePropagation(); es=Math.min(es+1,btns.length-1); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); e.stopImmediatePropagation(); es=Math.max(es-1,0); }
+      else if(e.key==='Enter'&&es>=0){ e.preventDefault(); e.stopImmediatePropagation(); elegir(es); return; }
+      else if(e.key==='Escape'){ e.stopImmediatePropagation(); box.hidden=true; return; }
+      btns.forEach((b,i)=>b.setAttribute('aria-selected',i===es?'true':'false')); if(btns[es]) btns[es].scrollIntoView({block:'nearest'}); });
     td('mot').appendChild(im);
     td('t').textContent=hora(r.ts);
     const a=td('act');
@@ -852,12 +874,24 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     const pre=[],sub=[],seen=new Set();
     for(const e of [...Object.values(extra),...base.values()]){ const n=e.nombre.toLowerCase(); if(seen.has(n)) continue; seen.add(n); if(n.startsWith(k)) pre.push(e); else if(n.includes(k)) sub.push(e); }
     pre.sort((a,b)=>a.nombre.length-b.nombre.length);
-    const all=pre.concat(sub); return {total:all.length,list:all.slice(0,limit)};
+    const all=pre.concat(sub);
+    if(all.length<8&&k.length>=3){
+      const limpio=t=>t.toLowerCase().replace(/[^a-z0-9ñ]/g,'');
+      const bi=t=>{ const m=new Map(); for(let i=0;i<t.length-1;i++){ const g=t.slice(i,i+2); m.set(g,(m.get(g)||0)+1); } return m; };
+      const kq=limpio(k), bk=bi(kq), nk=Math.max(1,kq.length-1);
+      const ya=new Set(all.map(e=>e.nombre.toLowerCase())); const cand=[];
+      for(const e of [...Object.values(extra),...base.values()]){ const n=e.nombre.toLowerCase(); if(ya.has(n)) continue; const t=limpio(n); if(t.length<2) continue;
+        const bt=bi(t); let inter=0; bk.forEach((v,g)=>{ const w=bt.get(g); if(w) inter+=Math.min(v,w); });
+        const sc=2*inter/(nk+Math.max(1,t.length-1)); if(sc>=0.4) cand.push([sc,e]); }
+      cand.sort((a,b)=>b[0]-a[0]); cand.slice(0,8-all.length).forEach(([,e])=>{ ya.add(e.nombre.toLowerCase()); all.push(Object.assign({parecido:true},e)); });
+    }
+    return {total:all.length,list:all.slice(0,limit)};
   }
   function showSugg(){
     const k=norm($('nombre').value), box=$('sugg'); box.textContent=''; sel=-1;
     if(k.length<2){ box.hidden=true; matches=[]; return; }
     const fm=findMatches(k,500); matches=fm.list.filter(m=>m.nombre.toLowerCase()!==k);
+    if(matches.length&&matches.every(m=>m.parecido)){ const h=document.createElement('div'); h.className='shead'; h.textContent='¿Quisiste decir…?'; box.appendChild(h); }
     matches.forEach((m,i)=>{ const b=document.createElement('button'); b.type='button'; b.setAttribute('role','option'); const a=document.createElement('span'); a.textContent=m.nombre; const c=document.createElement('span'); c.className='code'; c.textContent=m.codigo||'sin código'; b.append(a,c); b.onmousedown=e=>{e.preventDefault(); pick(i);}; box.appendChild(b); });
     box.hidden=!matches.length;
   }
@@ -866,7 +900,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   $('nombre').addEventListener('blur',()=>setTimeout(()=>$('sugg').hidden=true,100));
   $('nombre').addEventListener('keydown',e=>{
     const box=$('sugg'); if(box.hidden) return;
-    const btns=[...box.children];
+    const btns=[...box.querySelectorAll('button')];
     if(e.key==='ArrowDown'){ e.preventDefault(); sel=Math.min(sel+1,btns.length-1); }
     else if(e.key==='ArrowUp'){ e.preventDefault(); sel=Math.max(sel-1,0); }
     else if(e.key==='Enter'&&sel>=0){ e.preventDefault(); pick(sel); return; }
