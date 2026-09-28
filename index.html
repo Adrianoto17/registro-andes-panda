@@ -427,7 +427,7 @@ tbody tr:hover td{background:#201a30}
       <div class="tgroup">
         <span class="tlabel">Revisar</span>
         <div class="tbtns">
-          <button class="btn dup" type="button" id="dupbtn">Detectar duplicados</button>
+          <button class="btn dup" type="button" id="dupbtn"><span class="dupt">Detectar duplicados</span></button>
         </div>
       </div>
       <div class="tgroup">
@@ -692,7 +692,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     box.addEventListener('focusin',()=>{ encima=true; }); box.addEventListener('focusout',()=>{ encima=false; });
     // El mismo botón detiene también la animación de color del título.
     btn.onclick=()=>{ pausado=!pausado; btn.setAttribute('aria-pressed',String(pausado)); btn.setAttribute('aria-label',pausado?'Reanudar animaciones':'Pausar animaciones');
-      const hd=box.closest('header'); if(hd) hd.classList.toggle('quieto',pausado); };
+      const hd=box.closest('header'); if(hd) hd.classList.toggle('quieto',pausado); document.body.classList.toggle('quieto',pausado); };
   })();
 
   // ---------- base ----------
@@ -2015,6 +2015,11 @@ h1{background:linear-gradient(90deg,#8f74ff 0%,#7c5cff 14%,#a893ff 30%,#f1effa 4
   background-size:200% 100%;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
 h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip:initial;color:inherit!important;-webkit-text-fill-color:transparent}
 
+/* ---- "Detectar duplicados": el mismo recorrido de color que el título, en blanco ↔ lila claro
+   (sobre el fondo morado del botón; lila #b9a8ff sobre #41308f ≈ 5:1) ---- */
+.btn.dup .dupt{background:linear-gradient(90deg,#b9a8ff 0%,#d6ccff 25%,#ffffff 50%,#d6ccff 75%,#b9a8ff 100%);background-size:200% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+
 /* ---- Celular: el chip de sesión va al final de la página (no flota encima de los botones)
         y el subtítulo del carrusel reserva dos líneas para que el contenido no salte al cambiar ---- */
 @media (max-width:760px){
@@ -2055,6 +2060,8 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   /* Título: el color recorre todas las letras, lento y continuo; se detiene con el botón ⏸ del subtítulo */
   h1{animation:titulo 7s linear infinite}
   header.quieto h1{animation-play-state:paused}
+  .btn.dup .dupt{animation:titulo 7s linear infinite}
+  body.quieto .btn.dup .dupt{animation-play-state:paused}
   @keyframes titulo{from{background-position:0% 0}to{background-position:-200% 0}}
 
   /* Ranking: la píldora se desliza */
