@@ -274,7 +274,7 @@ h1{letter-spacing:-.02em}
 .btn:hover{border-color:#5b3fd6;background:#201a30}
 .btn.primary{background:linear-gradient(135deg,#7c5cff,#5b3fd6)!important;box-shadow:0 0 18px rgb(124 92 255 / .35);text-shadow:none}
 .btn.primary:hover{filter:brightness(1.12)}
-.btn.dup{background:linear-gradient(135deg,#41308f,#191526)!important;border-color:#5b3fd6!important;box-shadow:0 0 14px rgb(124 92 255 / .25)!important}
+.btn.dup{background-image:linear-gradient(135deg,#41308f,#191526)!important;border-color:#5b3fd6!important;box-shadow:0 0 14px rgb(124 92 255 / .25)!important}
 .btn.dup:hover{filter:brightness(1.15)}
 input[type=date],input[type=text],input[type=password],textarea{background:#14111f!important;border-color:#2c2440!important}
 input::placeholder,textarea::placeholder{color:#6f6c80}
@@ -2015,10 +2015,12 @@ h1{background:linear-gradient(90deg,#8f74ff 0%,#7c5cff 14%,#a893ff 30%,#f1effa 4
   background-size:200% 100%;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
 h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip:initial;color:inherit!important;-webkit-text-fill-color:transparent}
 
-/* ---- "Detectar duplicados": el mismo recorrido de color que el título, en blanco ↔ lila claro
-   (sobre el fondo morado del botón; lila #b9a8ff sobre #41308f ≈ 5:1) ---- */
-.btn.dup .dupt{background:linear-gradient(90deg,#b9a8ff 0%,#d6ccff 25%,#ffffff 50%,#d6ccff 75%,#b9a8ff 100%);background-size:200% 100%;
-  -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+/* ---- "Detectar duplicados": todo el botón (el fondo) hace el recorrido de color del título,
+   de morado oscuro a morado claro. Las letras quedan blancas con una sombra para leerse cuando pasa la franja clara. ---- */
+/* Sin "!important" en background-position: una declaración importante bloquearía la animación */
+.btn.dup{background-image:linear-gradient(90deg,#4a33b8 0%,#5b3fd6 22%,#8a6cff 42%,#a893ff 50%,#8a6cff 58%,#5b3fd6 78%,#4a33b8 100%)!important;
+  background-size:200% 100%!important;background-position:0% 0;border-color:#7c5cff!important}
+.btn.dup .dupt{color:#fff;text-shadow:0 1px 2px rgb(20 10 50 / .75)}
 
 /* ---- Celular: el chip de sesión va al final de la página (no flota encima de los botones)
         y el subtítulo del carrusel reserva dos líneas para que el contenido no salte al cambiar ---- */
@@ -2060,8 +2062,8 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   /* Título: el color recorre todas las letras, lento y continuo; se detiene con el botón ⏸ del subtítulo */
   h1{animation:titulo 7s linear infinite}
   header.quieto h1{animation-play-state:paused}
-  .btn.dup .dupt{animation:titulo 7s linear infinite}
-  body.quieto .btn.dup .dupt{animation-play-state:paused}
+  .btn.dup{animation:titulo 7s linear infinite}
+  body.quieto .btn.dup{animation-play-state:paused}
   @keyframes titulo{from{background-position:0% 0}to{background-position:-200% 0}}
 
   /* Ranking: la píldora se desliza */
