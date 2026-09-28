@@ -2009,7 +2009,9 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
 
 /* ---- Título: un solo degradado morado sobre todo "Registro Diario de Creadores" ----
    El degradado es periódico (empieza y termina en el mismo color) para que la animación se repita sin saltos. */
-h1{background:linear-gradient(90deg,#8f74ff 0%,#7c5cff 22%,#a893ff 38%,#ffffff 50%,#a893ff 62%,#7c5cff 78%,#8f74ff 100%);
+/* Mitad morado, mitad blanco: al empezar se ve como el título original ("Registro Diario" morado, "de Creadores" blanco)
+   y luego el color avanza letra por letra de morado a blanco sin parar. */
+h1{background:linear-gradient(90deg,#8f74ff 0%,#7c5cff 14%,#a893ff 30%,#f1effa 44%,#ffffff 50%,#f1effa 56%,#a893ff 70%,#7c5cff 86%,#8f74ff 100%);
   background-size:200% 100%;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
 h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip:initial;color:inherit!important;-webkit-text-fill-color:transparent}
 
