@@ -15,3 +15,13 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match('/').then(m => m || Response.error()))
   );
 });
+// Al tocar un aviso del Calendario: abre (o enfoca) la página en el día de esa actividad
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/?vista=calendario';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(ws => {
+    const w = ws.find(c => new URL(c.url).origin === self.location.origin);
+    if (w) { w.focus(); return w.navigate ? w.navigate(url) : null; }
+    return self.clients.openWindow(url);
+  }));
+});
