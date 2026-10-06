@@ -394,6 +394,7 @@ tbody tr:hover td{background:#201a30}
     <button type="button" class="vbtn" id="vpre" data-vista="premios" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/></svg><span>Premios</span><span class="vbadge" id="prebadge" hidden></span></button>
     <button type="button" class="vbtn" id="vcon" data-vista="consultas" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5z"/></svg><span>Consultas</span><span class="vbadge" id="conbadge" hidden></span></button>
     <button type="button" class="vbtn" id="vgan" data-vista="ganadores" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4"/></svg><span>Ganadores</span></button>
+    <button type="button" class="vbtn" id="vpag" data-vista="pagos" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/><path d="M16 15h2"/></svg><span>Pagos</span><span class="vbadge" id="pagbadge" hidden></span></button>
   </nav>
 
   <div class="meta panel" id="meta">
@@ -2515,7 +2516,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   const ocultables=()=>[$('meta'),document.querySelector('section[aria-label="Agregar registro"]'),document.querySelector('section[aria-label="Registros del día"]'),document.querySelector('header .datebox')].filter(Boolean);
   // Secciones de la plataforma. "registro" y "calendario" las maneja este archivo; el resto, vercel/plataforma.html
   // (escucha el evento "registro:vista").
-  const VISTAS=['inicio','registro','calendario','creadores','premios','consultas','ganadores'];
+  const VISTAS=['inicio','registro','calendario','creadores','premios','consultas','ganadores','pagos'];
   function ver(v,guardar){
     vista=VISTAS.includes(v)?v:'inicio';
     const reg=vista==='registro', cal=vista==='calendario';
@@ -3744,6 +3745,264 @@ html.crmlock{overflow:hidden}
     document.addEventListener('visibilitychange',async()=>{ if(!document.hidden&&user()){ await cargar(); badges(); if(SEC[vistaAct]&&!abierto()) pintarVista(); } });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
+<!-- Sección Pagos (avisos de pago por mes, agrupados por agente) -->
+<style>
+/* ===== Sección Pagos ===== */
+#vista-pagos{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+#vista-pagos>*,.pggrupo,.pgwrap{min-width:0}
+#vista-pagos[hidden]{display:none!important}
+.pgerr{margin:0;color:#F4A39C;font-size:13px}
+.pgres{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.pgkpi{display:grid;gap:4px;padding:12px 14px;border:1px solid #2c2440;border-radius:14px;background:rgb(25 21 38 / .85)}
+.pgkpi .pgkm{font-size:12.5px;color:#a6a3b3;font-weight:600}
+.pgkpi b{font-size:22px;color:#f1effa;font-variant-numeric:tabular-nums}
+.pgkpi small{font-size:12px;color:#F2D98E}
+.pgkpi.ok small{color:#8fe0bc}
+.pgbar{height:6px;border-radius:99px;background:#241d3f;overflow:hidden}
+.pgbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#7c5cff,#4fd1a5)}
+.pgfil{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.pgfil2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pgq{background:#14111f;border:1px solid #2c2440;border-radius:10px;padding:8px 12px;color:inherit;font:inherit;font-size:14px;min-width:220px}
+.pgfal[aria-pressed="true"]{border-color:#f5b83d;color:#ffd98a}
+.pggrupos{display:grid;gap:14px}
+.pggrupo{border:1px solid #2c2440;border-radius:16px;background:rgb(25 21 38 / .85);overflow:hidden}
+.pgcab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;background:#14111f;border-bottom:1px solid #2c2440}
+.pgcab h3{margin:0;font-size:16px;color:#f1effa}
+.pgn{font-size:12.5px;color:#8d86a8}
+.pgmini{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.pgchip{font-size:12px;color:#c9c4de;background:#241d3f;border:1px solid #3a2f63;border-radius:999px;padding:3px 9px;font-variant-numeric:tabular-nums}
+.pgchip b{color:#F2D98E}
+.pgchip.ok b{color:#8fe0bc}
+.pgwrap{overflow-x:auto}
+.pgtab{width:100%;border-collapse:collapse;font-size:14px}
+.pgtab th{text-align:left;font-size:12.5px;font-weight:600;color:#a6a3b3;padding:10px 14px;border-bottom:1px solid #2c2440;white-space:nowrap}
+.pgtab td{padding:9px 14px;border-bottom:1px solid #211b36;vertical-align:middle}
+.pgtab tbody tr:last-child td{border-bottom:0}
+.pgtab tbody tr:hover{background:#1d1733}
+.pgcre{min-width:0}
+.pgu{display:block;background:none;border:0;padding:0;color:#f1effa;font:inherit;font-weight:700;cursor:copy;text-align:left;max-width:100%;overflow-wrap:anywhere}
+.pgu:hover{color:#c4b8ff}
+.pgid{display:block;background:none;border:0;padding:0;margin-top:2px;color:#8d86a8;font-family:var(--mono);font-size:12px;cursor:copy;text-align:left;font-variant-numeric:tabular-nums}
+.pgid:hover{color:#c4b8ff}
+.pgt{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;border:1px solid #6b4e1f;background:#2b2112;color:#ffd98a}
+.pgt .pgd{width:9px;height:9px;border-radius:50%;background:#f5b83d}
+.pgt.on{border-color:#2d5a47;background:#1e3a30;color:#8fe0bc}
+.pgt.on .pgd{background:#4fd1a5}
+.pgt:hover{filter:brightness(1.15)}
+.pgt:disabled{opacity:.6;cursor:wait}
+.pgx{text-align:right;white-space:nowrap}
+.pgedit{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.pgform{display:grid;gap:10px;padding:14px;border:1px dashed #3a2f63;border-radius:16px;background:rgb(20 17 31 / .6)}
+.pgform h3{margin:0;font-size:15px;color:#f1effa}
+.pgnota{margin:0;font-size:13px;color:#a6a3b3}
+.pgfrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.pgfrow label{display:grid;gap:4px;font-size:12px;font-weight:600;color:#b3aecb}
+.pgfrow input,.pgfrow select{background:#14111f;border:1px solid #2c2440;border-radius:8px;padding:8px 10px;color:inherit;font:inherit;font-size:14px;min-width:0}
+.pgfrow input[hidden]{display:none}
+@media (max-width:640px){
+  .pgq{min-width:0;flex:1 1 160px}
+  .pgfil .pseg{flex-wrap:wrap;overflow:visible;max-width:100%}
+  .pgmini{margin-left:0;width:100%}
+  .pgtab thead{display:none}
+  .pgtab,.pgtab tbody{display:block}
+  .pgtab tr{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px 10px;padding:12px 14px;border-bottom:1px solid #211b36}
+  .pgtab tbody tr:last-child{border-bottom:0}
+  .pgtab td{display:block;padding:0;border:0}
+  .pgtab td.pgcre,.pgtab td.pgx{grid-column:1/-1}
+  .pgtab td.pgx{text-align:left}
+  .pgtab td[data-l]::before{content:attr(data-l);display:block;font-size:11.5px;font-weight:600;color:#8d86a8;margin-bottom:4px}
+  .pgt{width:100%;justify-content:center}
+}
+@media (pointer:coarse){ .pgt,.pgq,.pgfrow input,.pgfrow select{min-height:44px} }
+</style>
+<script>
+// ===== Sección Pagos: a quién ya se le avisó de su pago, por mes y agrupado por agente =====
+// Lista compartida por todo el equipo en el almacén clave-valor (clave 'pagos').
+(function(){
+  const $=id=>document.getElementById(id);
+  const CLAVE='pagos';
+  const MESES_INI=['Agosto','Setiembre','Noviembre'];
+  // [usuario de TikTok, agente, ID]
+  const LISTA_INI=[
+    ['whoiskerly_','Anali 034','7634356236313493521'],['who_is_keiner','Yulisa 032','7446259419110834193'],['wen.sv3','Yulisa 032','7640474199567482897'],
+    ['vekitellollatas','Sebastian 031','7640502847460786192'],['tu.ivan26','Sebastian 031','7655329643381407745'],['tadeo_mora5','Anali 034','7668864293139382293'],
+    ['shamy.mt','Yulisa 032','7647754628993548289'],['saoriairi','Yulisa 032','7655037502176215057'],['sandra.milena.qui31','Jamila 094','7561859118173224961'],
+    ['riwait','Jamila 094','7580554385470537744'],['rash_ff_02','Anali 034','7659451393862025233'],['meli_salazar3','Anali 034','7519933450166697985'],
+    ['stefani.tavara98','Mariana 016','7515276531850330113'],['luzmila.18_j.08','Yulisa 032','7648035860746633233'],['luna27.19.0','Jamila 094','7468722600567603217'],
+    ['luis_mesa_05','Jamila 094','7413661935947841552'],['lisbeth05cas','Anali 034','7524152763778088961'],['lilianalima56','Jamila 094','7639043454709989392'],
+    ['moonmoonmoon1611','Mariana 016','7646211282030608402'],['karolhax','Mariana 016','7643472109011746817'],['jugodefresa.oficial','Jamila 094','7370720632960712720'],
+    ['chelo02022','Mariana 016','7635880365516881936'],['iamjeanmarco27','Jamila 094','7511580725121105921'],['gabrielborras.liv','Anali 034','7655826905622675472'],
+    ['gabisita1111','Jamila 094','7472723091010109441'],['flordelizleyva10','Yulisa 032','7359137266041618438'],['florcita0546','Anali 034','7381189031759200273'],
+    ['fercho_jp_','Anali 034','7653319793831100432'],['f4r.masi_ta','Anali 034','7649923327305269249'],['eva_54.1','Yulisa 032','7451038710587703313'],
+    ['el.gran.muchacho','Yulisa 032','7572772889812992001'],['diversion20202','Yulisa 032','7570368622535933969'],['carlos_daniel12345671','Anali 034','7670198800144810004'],
+    ['bregame.vasquez','Jamila 094','7623965888982728705'],['be.nito_10s','Yulisa 032','7537374397104095233'],['arenitaoficial13','Yulisa 032','7468654641216077841'],
+    ['alvaro_kun09','Jamila 094','7522895817271705616'],['alexandro_067','Jamila 094','7469071350536339472']
+  ];
+  const inicial=()=>({v:1,meses:MESES_INI.slice(),lista:LISTA_INI.map(([u,a,id])=>({u,a,id})),est:{}});
+  const norm=s=>String(s||'').trim().replace(/^@/,'').toLowerCase();
+  const usuario=()=>(window.__reg&&window.__reg.user&&window.__reg.user())||'';
+  const clave=(u,m)=>norm(u)+'|'+m;
+
+  function h(tag,props,...kids){
+    const el=document.createElement(tag);
+    if(props) for(const [k,v] of Object.entries(props)){
+      if(v==null||v===false) continue;
+      if(k==='class') el.className=v; else if(k==='text') el.textContent=v;
+      else if(k.startsWith('on')) el.addEventListener(k.slice(2),v);
+      else el.setAttribute(k,v===true?'':v);
+    }
+    kids.flat().forEach(c=>{ if(c==null||c===false) return; el.appendChild(typeof c==='string'?document.createTextNode(c):c); });
+    return el;
+  }
+  function avisar(msg,ms){
+    if(typeof window.toast==='function'){ window.toast(msg,ms); return; }
+    const t=$('toast'); if(t){ t.textContent=msg; t.hidden=false; clearTimeout(avisar._t); avisar._t=setTimeout(()=>{ t.hidden=true; },ms||2600); }
+    const s=$('srstatus'); if(s){ s.textContent=''; setTimeout(()=>{ s.textContent=msg; },60); }
+  }
+  const fechaCorta=ts=>{ try{ return new Intl.DateTimeFormat('es-PE',{timeZone:'America/Lima',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(new Date(ts)); }catch(e){ return ''; } };
+
+  // ---------- datos ----------
+  let D=null, cargado=false, guardando=false, error=false;
+  let filtroAgente='todos', soloFalta=false, busca='', editar=false, visible=false;
+  async function leer(){
+    const r=window.__reg; if(!r) throw new Error('sin conexión');
+    const v=await r.rpc('reg_kv_get',{p_code:r.code(),p_clave:CLAVE});
+    if(!v||!Array.isArray(v.lista)) return inicial();
+    return {v:1,meses:Array.isArray(v.meses)&&v.meses.length?v.meses:MESES_INI.slice(),lista:v.lista,est:v.est||{}};
+  }
+  async function cargar(){
+    try{ D=await leer(); cargado=true; error=false; }catch(e){ error=true; if(!D) D=inicial(); }
+    const s=$('vista-pagos'); const escribiendo=s&&document.activeElement&&s.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)&&document.activeElement.id!=='pgq';
+    if(visible&&!editar&&!escribiendo) pintar(); badge();
+  }
+  // Guardado seguro: lee lo último, aplica el cambio encima y guarda (no pisa lo que marcó otra persona)
+  async function cambiar(fn,msg){
+    if(guardando) return false; guardando=true;
+    try{
+      const r=window.__reg; const d=await leer();
+      if(fn(d)===false){ guardando=false; return false; }
+      d.act=new Date().toISOString(); d.por=usuario();
+      await r.rpc('reg_kv_set',{p_code:r.code(),p_clave:CLAVE,p_valor:d});
+      D=d; guardando=false; error=false; if(msg) avisar(msg); pintar(); badge(); return true;
+    }catch(e){ guardando=false; avisar('No se pudo guardar. Revisa tu conexión e intenta otra vez.'); return false; }
+  }
+  const avisado=(u,m)=>!!(D&&D.est[clave(u,m)]&&D.est[clave(u,m)].s);
+  function agentes(){ const m=new Map(); (D?D.lista:[]).forEach(c=>{ if(!m.has(c.a)) m.set(c.a,[]); m.get(c.a).push(c); });
+    return [...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],'es')).map(([a,l])=>[a,l.sort((x,y)=>norm(x.u).localeCompare(norm(y.u)))]); }
+  function faltan(){ if(!D) return 0; let n=0; const m=D.meses[D.meses.length-1]; D.lista.forEach(c=>{ if(!avisado(c.u,m)) n++; }); return n; }
+  // La insignia del menú queda oculta: con decenas de creadores por mes sería un número siempre alto que no ayuda.
+  function badge(){ const b=$('pagbadge'); if(!b) return; const n=cargado?faltan():0; b.hidden=true;
+    const btn=$('vpag'); if(btn) btn.setAttribute('aria-label','Pagos'+(n?' · '+n+' sin avisar ('+D.meses[D.meses.length-1]+')':'')); }
+
+  // ---------- pantalla ----------
+  function toggle(c,m){
+    const k=clave(c.u,m), e=D.est[k], on=!!(e&&e.s);
+    const b=h('button',{type:'button',class:'pgt'+(on?' on':''),'aria-pressed':String(on),
+      'aria-label':m+' · @'+c.u+': '+(on?'Avisado':'No avisado'),
+      title:on&&e.por?'Avisado por '+e.por+(e.ts?' · '+fechaCorta(e.ts):''):'Toca para marcar como avisado',
+      onclick:()=>{ b.disabled=true; cambiar(d=>{ const x=d.est[k]; if(x&&x.s) delete d.est[k]; else d.est[k]={s:1,por:usuario(),ts:new Date().toISOString()}; },(on?'No avisado':'Avisado')+': @'+c.u+' · '+m).then(()=>{ b.disabled=false; }); }},
+      h('span',{class:'pgd','aria-hidden':'true'}),on?'Avisado':'No avisado');
+    return b;
+  }
+  function copiar(txt,et){ try{ navigator.clipboard.writeText(txt).then(()=>avisar('Copiado: '+et)); }catch(e){} }
+  function pintar(){
+    const s=$('vista-pagos'); if(!s) return;
+    const foco=document.activeElement&&s.contains(document.activeElement)?document.activeElement.id:'';
+    s.textContent='';
+    if(!D){ s.appendChild(h('div',{class:'pempty'},h('b',{text:'Cargando pagos…'}))); return; }
+    const M=D.meses, total=D.lista.length, grupos=agentes();
+    // encabezado
+    s.appendChild(h('div',{class:'phead'},
+      h('div',null,h('h2',{tabindex:'-1',text:'Pagos'}),h('p',{text:total+' creadores · '+grupos.length+' agentes · toca la casilla para marcar si ya se le avisó de su pago'})),
+      h('div',{class:'pacts'},h('button',{type:'button',class:'btn ghost','aria-pressed':String(editar),onclick:()=>{ editar=!editar; pintar(); }},editar?'Listo':'Editar lista'))));
+    if(error) s.appendChild(h('p',{class:'pgerr',role:'alert',text:'No se pudo conectar. Lo que ves puede no estar al día; se reintentará solo.'}));
+    // resumen por mes
+    const res=h('div',{class:'pgres'});
+    M.forEach(m=>{ const n=D.lista.filter(c=>avisado(c.u,m)).length; const pct=total?Math.round(n*100/total):0;
+      res.appendChild(h('div',{class:'pgkpi'+(n===total&&total?' ok':'')},h('span',{class:'pgkm',text:'Pago de '+m}),h('b',{text:n+' / '+total}),h('span',{class:'pgbar','aria-hidden':'true'},h('i',{style:'width:'+pct+'%'})),h('small',{text:n===total&&total?'Todos avisados':(total-n)+' por avisar'}))); });
+    s.appendChild(res);
+    // filtros
+    const segA=h('div',{class:'pseg',role:'group','aria-label':'Agente'});
+    [['todos','Todos',total]].concat(grupos.map(([a,l])=>[a,a,l.length])).forEach(([k,n,c])=>segA.appendChild(h('button',{type:'button','aria-pressed':String(filtroAgente===k),onclick:()=>{ filtroAgente=k; pintar(); }},n,h('b',{text:String(c)}))));
+    const q=h('input',{type:'search',id:'pgq',class:'pgq',placeholder:'Buscar creador o ID…',value:busca,autocomplete:'off',spellcheck:'false','aria-label':'Buscar creador'});
+    q.addEventListener('input',()=>{ busca=q.value; pintarListas(); });
+    const falta=h('button',{type:'button',class:'btn ghost pgfal','aria-pressed':String(soloFalta),onclick:()=>{ soloFalta=!soloFalta; pintar(); }},soloFalta?'Viendo: falta avisar':'Solo falta avisar');
+    s.appendChild(h('div',{class:'pgfil'},segA,h('div',{class:'pgfil2'},q,falta)));
+    const cont=h('div',{class:'pggrupos',id:'pggrupos'}); s.appendChild(cont);
+    function pintarListas(){
+      cont.textContent=''; const k=norm(busca); let vistos=0;
+      grupos.filter(([a])=>filtroAgente==='todos'||filtroAgente===a).forEach(([a,l])=>{
+        const fil=l.filter(c=>(!k||norm(c.u).includes(k)||String(c.id).includes(k))&&(!soloFalta||M.some(m=>!avisado(c.u,m))));
+        if(!fil.length) return; vistos+=fil.length;
+        const cab=h('header',{class:'pgcab'},h('h3',{text:a}),h('span',{class:'pgn',text:l.length+' creador'+(l.length>1?'es':'')}),
+          h('div',{class:'pgmini'},M.map(m=>{ const n=l.filter(c=>avisado(c.u,m)).length; return h('span',{class:'pgchip'+(n===l.length?' ok':''),title:'Pago de '+m+': '+n+' de '+l.length+' avisados'},m.slice(0,3)+' ',h('b',{text:n+'/'+l.length})); })));
+        const tb=h('tbody');
+        fil.forEach(c=>{
+          const tr=h('tr',null,
+            h('td',{class:'pgcre'},h('button',{type:'button',class:'pgu',translate:'no',title:'Copiar usuario',onclick:()=>copiar(c.u,'@'+c.u)},'@'+c.u),
+              c.id?h('button',{type:'button',class:'pgid',translate:'no',title:'Copiar ID',onclick:()=>copiar(String(c.id),'ID de @'+c.u)},String(c.id)):h('span',{class:'pgid tmu',text:'Sin ID'})),
+            M.map(m=>h('td',{class:'pgmes','data-l':'Pago de '+m},toggle(c,m))),
+            editar?h('td',{class:'pgx'},(()=>{ const q2=h('button',{type:'button',class:'btn sm ghost'},'Quitar'); q2.onclick=()=>{ if(q2.dataset.c){ cambiar(d=>{ d.lista=d.lista.filter(x=>norm(x.u)!==norm(c.u)); },'Quitado: @'+c.u); return; } q2.dataset.c='1'; q2.textContent='¿Quitar? Toca otra vez'; }; q2.onblur=()=>{ delete q2.dataset.c; q2.textContent='Quitar'; }; return q2; })()):null);
+          tb.appendChild(tr);
+        });
+        const tabla=h('table',{class:'pgtab'},h('thead',null,h('tr',null,h('th',{scope:'col',text:'Creador'}),M.map(m=>h('th',{scope:'col',text:'Pago de '+m})),editar?h('th',{scope:'col'},h('span',{class:'sr-only',text:'Acciones'})):null)),tb);
+        cont.appendChild(h('section',{class:'pggrupo','aria-label':'Agente '+a},cab,h('div',{class:'pgwrap'},tabla)));
+      });
+      if(!vistos) cont.appendChild(h('div',{class:'pempty'},h('b',{text:soloFalta?'¡Todos avisados!':'Sin resultados'}),h('p',{text:soloFalta?'No queda nadie por avisar con estos filtros.':'Prueba con otro nombre, ID o agente.'})));
+    }
+    pintarListas();
+    if(editar) s.appendChild(formEditar(grupos));
+    if(foco&&$(foco)){ $(foco).focus(); if(foco==='pgq'){ const v=$(foco).value; $(foco).setSelectionRange(v.length,v.length); } }
+  }
+  function formEditar(grupos){
+    const base=new Map(); (window.__BASE__||[]).forEach(([n,c])=>base.set(norm(n),String(c||'')));
+    const u=h('input',{type:'text',id:'pgnu',placeholder:'Usuario de TikTok',autocomplete:'off',spellcheck:'false',autocapitalize:'off'});
+    const id=h('input',{type:'text',id:'pgnid',placeholder:'ID (se llena solo si está en la base)',inputmode:'numeric',autocomplete:'off'});
+    u.addEventListener('input',()=>{ const c=base.get(norm(u.value)); if(c&&!id.value) id.value=c; });
+    const ag=h('select',{id:'pgnag'}); grupos.forEach(([a])=>ag.appendChild(h('option',{value:a,text:a}))); ag.appendChild(h('option',{value:'__otro',text:'Otro agente…'}));
+    const otro=h('input',{type:'text',id:'pgnot',placeholder:'Nombre del agente (ej. Rosa 040)',hidden:true});
+    ag.onchange=()=>{ otro.hidden=ag.value!=='__otro'; if(!otro.hidden) otro.focus(); };
+    const err=h('div',{class:'cferr',role:'alert'});
+    const add=h('button',{type:'submit',class:'btn primary'},'Agregar creador');
+    const f=h('form',{class:'pgform',novalidate:true},h('h3',{text:'Agregar creador'}),
+      h('div',{class:'pgfrow'},h('label',null,'Usuario',u),h('label',null,'ID',id),h('label',null,'Agente',ag,otro)),err,add);
+    f.onsubmit=e=>{ e.preventDefault(); err.textContent='';
+      const nu=u.value.trim().replace(/^@/,''), agente=ag.value==='__otro'?otro.value.trim():ag.value;
+      if(!nu){ err.textContent='Escribe el usuario.'; u.focus(); return; }
+      if(!agente){ err.textContent='Escribe el nombre del agente.'; otro.focus(); return; }
+      if(D.lista.some(x=>norm(x.u)===norm(nu))){ err.textContent='@'+nu+' ya está en la lista.'; u.focus(); return; }
+      cambiar(d=>{ if(d.lista.some(x=>norm(x.u)===norm(nu))) return false; d.lista.push({u:nu,a:agente,id:id.value.trim()}); },'Agregado: @'+nu); };
+    const mes=h('input',{type:'text',id:'pgnmes',placeholder:'ej. Octubre',autocomplete:'off'});
+    const fm=h('form',{class:'pgform',novalidate:true},h('h3',{text:'Meses'}),
+      h('p',{class:'pgnota',text:'Columnas actuales: '+D.meses.join(', ')+'. Agrega un mes nuevo o quita el último.'}),
+      h('div',{class:'pgfrow'},h('label',null,'Mes nuevo',mes)),
+      h('div',{class:'pacts'},h('button',{type:'submit',class:'btn'},'+ Agregar mes'),
+        D.meses.length>1?h('button',{type:'button',class:'btn ghost',onclick:()=>{ const m=D.meses[D.meses.length-1]; cambiar(d=>{ d.meses=d.meses.filter(x=>x!==m); },'Quitada la columna '+m+' (las marcas se conservan)'); }},'Quitar «'+D.meses[D.meses.length-1]+'»'):null));
+    fm.onsubmit=e=>{ e.preventDefault(); let m=mes.value.trim(); if(!m) return; m=m.charAt(0).toUpperCase()+m.slice(1).toLowerCase();
+      if(D.meses.includes(m)){ avisar(m+' ya está'); return; } cambiar(d=>{ if(!d.meses.includes(m)) d.meses.push(m); },'Agregado el mes '+m); };
+    return h('div',{class:'pgedit'},f,fm);
+  }
+
+  // ---------- navegación ----------
+  function mostrar(v){
+    visible=v==='pagos'; const s=$('vista-pagos'); if(s) s.hidden=!visible;
+    if(visible){ pintar(); cargar(); }
+  }
+  function iniciar(){
+    if(!$('vpag')) return;
+    const ancla=$('vista-ganadores')||$('calendario');
+    if(!ancla){ setTimeout(iniciar,150); return; }
+    if(!$('vista-pagos')){ const s=h('section',{class:'pv',id:'vista-pagos','aria-label':'Pagos',hidden:true}); ancla.after(s); }
+    document.addEventListener('registro:vista',e=>mostrar(e.detail));
+    if(window.__cal&&window.__cal.vista) mostrar(window.__cal.vista());
+    const esperar=setInterval(()=>{ if(window.__reg&&usuario()){ clearInterval(esperar); cargar(); } },400);
+    // al día con lo que marcan los demás
+    let n=0; setInterval(()=>{ if(!usuario()||document.hidden||guardando) return; if(!visible&&(++n%3)) return; cargar(); },20000);
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&usuario()) cargar(); });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(iniciar,0)); else setTimeout(iniciar,0);
 })();
 </script>
 </body>
