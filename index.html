@@ -2417,7 +2417,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
 @media (max-width:640px) and (pointer:coarse){ #rows .x.ic{min-height:44px} }
 </style>
 <script>
-// ===== Sección Calendario: batallas, eventos, premios y seguimientos (compartido con todo el equipo) =====
+// ===== Sección Calendario: batallas, eventos, premios y seguimientos (individual: cada agente ve solo lo suyo) =====
 // Se guarda en el almacén clave-valor existente (reg_kv_get / reg_kv_set, clave 'calendario').
 (function(){
   const $=id=>document.getElementById(id);
@@ -2425,7 +2425,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   // URL de la app web de Google Apps Script que copia el calendario a Google Calendar (vacío = desactivado)
   const GOOGLE_SYNC=()=>(window.REGISTRO_CONFIG&&window.REGISTRO_CONFIG.calendarioGoogle)||'';
   function avisarGoogle(){ const u=GOOGLE_SYNC(); if(!u||!/^https:\/\/script\.google\.com\//.test(u)) return; try{ fetch(u+(u.includes('?')?'&':'?')+'t='+Date.now(),{mode:'no-cors',cache:'no-store'}).catch(()=>{}); }catch(e){} }
-  const MSG_OK=()=>'Guardado en la nube · se comparte con todo el equipo'+(GOOGLE_SYNC()?' · se copia a Google Calendar':'');
+  const MSG_OK=()=>'Guardado en la nube · tu calendario es personal: solo tú ves lo que programas'+(GOOGLE_SYNC()?' · se copia a Google Calendar':'');
   const TIPOS={
     batalla:{nombre:'Batalla',color:'#7c5cff',estados:['Programada','Confirmada','Realizada','Cancelada'],fin:['Realizada','Cancelada'],motivo:'Sobre su batalla',titulo:'Nombre de la batalla o evento'},
     evento:{nombre:'Evento',color:'#3fb5ff',estados:['Próximo','En curso','Terminado'],fin:['Terminado'],motivo:'Información de eventos',titulo:'Nombre del evento'},
@@ -2458,6 +2458,8 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   const finDe=it=>it.tipo==='evento'?(it.fin&&it.fin>=it.fecha?it.fin:it.fecha):it.fecha;
   const cubre=(it,f)=>it.fecha<=f&&f<=finDe(it);
   const usuario=()=>(window.__reg&&window.__reg.user&&window.__reg.user())||'';
+  // Calendario individual: cada agente ve y recibe avisos solo de lo que él programó.
+  const mios=l=>{ const u=normTxt(usuario()); return u?l.filter(it=>normTxt(it.por)===u):[]; };
 
   function h(tag,props,...kids){
     const el=document.createElement(tag);
@@ -2489,7 +2491,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   }
   function estado(msg,err){ const s=$('calstatus'); if(!s) return; s.textContent=msg; s.classList.toggle('err',!!err); }
   async function refrescar(){
-    try{ const nuevos=await leer(); const cambio=JSON.stringify(nuevos)!==JSON.stringify(items); items=nuevos; cargado=true; revisarAvisos();
+    try{ const nuevos=mios(await leer()); const cambio=JSON.stringify(nuevos)!==JSON.stringify(items); items=nuevos; cargado=true; revisarAvisos();
       estado(MSG_OK());
       if(cambio||!refrescar._una){ refrescar._una=true; if(vista==='calendario'&&!formAbierto) render(); }
       badge();
@@ -2501,9 +2503,9 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
     try{
       const r=window.__reg; const actual=await leer();
       const res=fn(actual.map(x=>Object.assign({},x)));
-      if(res===false){ guardando=false; items=actual; render(); estado(MSG_OK()); return false; }
+      if(res===false){ guardando=false; items=mios(actual); render(); estado(MSG_OK()); return false; }
       await r.rpc('reg_kv_set',{p_code:r.code(),p_clave:CLAVE,p_valor:{items:res,act:new Date().toISOString(),por:usuario()}});
-      items=res; guardando=false; estado(MSG_OK()); avisarGoogle();
+      items=mios(res); guardando=false; estado(MSG_OK()); avisarGoogle();
       render(); badge(); if(okMsg) avisar(okMsg); return true;
     }catch(e){ guardando=false; estado('No se pudo guardar: sin conexión. Intenta de nuevo.',true); avisar('No se pudo guardar. Revisa tu conexión.'); return false; }
   }
@@ -2545,7 +2547,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
     const mes=delMes(mesY,mesM); const fil=$('calfiltros'); fil.textContent='';
     ORDEN.forEach(t=>{ const n=mes.filter(it=>it.tipo===t&&(!soloMios||it.por===usuario())).length;
       fil.appendChild(h('button',{type:'button',class:'cfil t-'+t,'aria-pressed':String(filtros.has(t)),onclick:()=>{ if(filtros.has(t)) filtros.delete(t); else filtros.add(t); render(); }},h('span',{class:'dot','aria-hidden':'true'}),TIPOS[t].nombre+' ',h('b',{text:String(n)}))); });
-    fil.appendChild(h('button',{type:'button',class:'cfil mios','aria-pressed':String(soloMios),onclick:()=>{ soloMios=!soloMios; render(); }},h('span',{class:'dot','aria-hidden':'true'}),'Solo los míos'));
+
     // cuadrícula (lunes a domingo)
     const g=$('calgrid'); g.textContent=''; const hoy=hoyLima();
     const primero=iso(mesY,mesM,1); const off=(diaSem(primero)+6)%7; const dias=new Date(Date.UTC(mesY,mesM+1,0)).getUTCDate();
@@ -2775,9 +2777,6 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
     }
     const txt=perm==='granted'?'Avisos activados · 10 min antes':perm==='denied'?'Avisos solo dentro de la página: el navegador bloqueó las notificaciones (actívalas en el candado junto a la dirección)':perm==='unsupported'?'Avisos dentro de la página (este navegador no tiene notificaciones)':'Avisos dentro de la página · toca «Permitir notificaciones» para recibirlas fuera';
     box.appendChild(h('span',{class:'avtxt'},txt));
-    const sel=select(['Los míos','Todo el equipo'],p.alcance==='todos'?'Todo el equipo':'Los míos'); sel.setAttribute('aria-label','¿De quién avisar?');
-    sel.onchange=()=>{ const q=prefs(); q.alcance=sel.value==='Todo el equipo'?'todos':'mios'; guardarPrefs(q); revisarAvisos(); };
-    box.appendChild(sel);
     if(perm==='default') box.appendChild(h('button',{type:'button',class:'btn',onclick:async()=>{ try{ await Notification.requestPermission(); }catch(e){} pintarAvisos(); }},'Permitir notificaciones'));
     const conSonido=p.sonido!==false;
     box.appendChild(h('button',{type:'button',class:'btn ghost','aria-pressed':String(conSonido),onclick:()=>{ const q=prefs(); q.sonido=!conSonido; guardarPrefs(q); pintarAvisos(); if(q.sonido) sonar(); avisar(q.sonido?'Sonido de avisos activado':'Avisos sin sonido'); }},conSonido?'Sonido: sí':'Sonido: no'));
@@ -3202,7 +3201,7 @@ html.crmlock{overflow:hidden}
   }
   function contactos(nombre){ const k=norm(nombre); return REG.filter(x=>norm(x.nombre)===k).sort((a,b)=>a.fecha<b.fecha?1:-1); }
 
-  // ---------- calendario compartido: lo "mío" ----------
+  // ---------- calendario (ya viene filtrado: solo lo que programó este agente) ----------
   const calItems=()=>CAL()?CAL().items():[];
   const misNombres=()=>new Set(P.creadores.map(c=>norm(c.usuario)));
   const esMio=(it,mis)=>it.por===user()||(it.creadores||[]).some(c=>mis.has(norm(c)));
