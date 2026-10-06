@@ -3821,7 +3821,7 @@ html.crmlock{overflow:hidden}
 </style>
 <script>
 // ===== Sección Pagos: a quién ya se le avisó de su pago, por mes y agrupado por agente =====
-// Lista compartida por todo el equipo en el almacén clave-valor (clave 'pagos').
+// Hoja de pagos individual por agente en el almacén clave-valor (clave 'pagos:<usuario>').
 (function(){
   const $=id=>document.getElementById(id);
   const CLAVE='pagos';
@@ -3868,11 +3868,20 @@ html.crmlock{overflow:hidden}
   // ---------- datos ----------
   let D=null, cargado=false, guardando=false, error=false;
   let filtroAgente='todos', soloFalta=false, busca='', editar=false, visible=false;
+  // Cada agente tiene su propia hoja de pagos (clave 'pagos:<usuario>'). La primera vez se copia la lista
+  // general de creadores y solo las marcas que ese mismo agente había hecho.
+  const miClave=()=>CLAVE+':'+String(usuario()||'').trim().toLowerCase();
+  const limpio=v=>({v:1,meses:Array.isArray(v.meses)&&v.meses.length?v.meses:MESES_INI.slice(),lista:Array.isArray(v.lista)?v.lista:[],est:v.est||{}});
   async function leer(){
     const r=window.__reg; if(!r) throw new Error('sin conexión');
-    const v=await r.rpc('reg_kv_get',{p_code:r.code(),p_clave:CLAVE});
-    if(!v||!Array.isArray(v.lista)) return inicial();
-    return {v:1,meses:Array.isArray(v.meses)&&v.meses.length?v.meses:MESES_INI.slice(),lista:v.lista,est:v.est||{}};
+    if(!usuario()) return inicial();
+    const v=await r.rpc('reg_kv_get',{p_code:r.code(),p_clave:miClave()});
+    if(v&&Array.isArray(v.lista)) return limpio(v);
+    const g=await r.rpc('reg_kv_get',{p_code:r.code(),p_clave:CLAVE});
+    if(!g||!Array.isArray(g.lista)) return inicial();
+    const u=String(usuario()).trim().toLowerCase(), est={};
+    Object.entries(g.est||{}).forEach(([k,x])=>{ if(x&&String(x.por||'').trim().toLowerCase()===u) est[k]=x; });
+    return limpio({meses:g.meses,lista:g.lista.map(c=>Object.assign({},c)),est});
   }
   async function cargar(){
     try{ D=await leer(); cargado=true; error=false; }catch(e){ error=true; if(!D) D=inicial(); }
@@ -3886,7 +3895,8 @@ html.crmlock{overflow:hidden}
       const r=window.__reg; const d=await leer();
       if(fn(d)===false){ guardando=false; return false; }
       d.act=new Date().toISOString(); d.por=usuario();
-      await r.rpc('reg_kv_set',{p_code:r.code(),p_clave:CLAVE,p_valor:d});
+      if(!usuario()) throw new Error('sin usuario');
+      await r.rpc('reg_kv_set',{p_code:r.code(),p_clave:miClave(),p_valor:d});
       D=d; guardando=false; error=false; if(msg) avisar(msg); pintar(); badge(); return true;
     }catch(e){ guardando=false; avisar('No se pudo guardar. Revisa tu conexión e intenta otra vez.'); return false; }
   }
