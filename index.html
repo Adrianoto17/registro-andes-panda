@@ -561,8 +561,12 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       lsave(d); return null; }
     if(fn==='reg_ranking'){ const c={}; d.r.forEach(x=>{ if(x.fecha>=a.p_desde&&x.fecha<=a.p_hasta) c[x.usuario]=(c[x.usuario]||0)+1; }); return Object.entries(c).sort((x,y)=>y[1]-x[1]||(x[0]<y[0]?-1:1)).map(([usuario,total])=>({usuario,total})); }
     if(fn==='reg_user_ok') return u!=='admin123';
-    if(fn==='reg_admin_check') return a.p_pass==='admin123';
-    if(fn==='reg_admin_list'){ if(a.p_pass!=='admin123') throw {code:'invalid_argument',message:'clave'}; return d.r.filter(x=>(!a.p_user||x.usuario===a.p_user)&&x.fecha>=a.p_desde&&x.fecha<=a.p_hasta).map(x=>Object.assign({},x)); }
+    const admOk=pp=>{ pp=String(pp||''); const i=pp.indexOf('\n'); if(i<0) return pp==='admin123'; const n=pp.slice(0,i).trim().toLowerCase(); return !!(d.adm&&d.adm[n]&&d.adm[n]===pp.slice(i+1)); };
+    if(fn==='reg_admin_check') return admOk(a.p_pass);
+    if(fn==='reg_admin_cuentas'){ if(a.p_pass!=='admin123') throw {code:'P0001',message:'solo_maestro'}; return Object.keys(d.adm||{}).sort().map(n=>({nombre:n,creado:null})); }
+    if(fn==='reg_admin_guardar'){ if(a.p_pass!=='admin123') throw {code:'P0001',message:'solo_maestro'}; const n=String(a.p_nombre||'').trim().toLowerCase(); if(!n||/\s/.test(n)) throw {message:'nombre_invalido'}; if(String(a.p_clave||'').length<6) throw {message:'clave_corta'}; d.adm=d.adm||{}; d.adm[n]=a.p_clave; lsave(d); return null; }
+    if(fn==='reg_admin_quitar'){ if(a.p_pass!=='admin123') throw {code:'P0001',message:'solo_maestro'}; if(d.adm) delete d.adm[String(a.p_nombre||'').trim().toLowerCase()]; lsave(d); return null; }
+    if(fn==='reg_admin_list'){ if(!admOk(a.p_pass)) throw {code:'invalid_argument',message:'clave'}; return d.r.filter(x=>(!a.p_user||x.usuario===a.p_user)&&x.fecha>=a.p_desde&&x.fecha<=a.p_hasta).map(x=>Object.assign({},x)); }
     if(fn==='reg_kv_get') return d.kv[a.p_clave]??null;
     if(fn==='reg_kv_set'){ d.kv[a.p_clave]=a.p_valor; lsave(d); return null; }
     return null;
@@ -1546,6 +1550,24 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
         <tbody id="admrows"></tbody>
       </table></div>
     </section>
+
+    <section class="panel" id="admcoord" hidden aria-labelledby="admcoordhd">
+      <div class="admsec">
+        <h2 id="admcoordhd">Cuentas de coordinadoras</h2>
+      </div>
+      <p class="small admnota">Cada coordinadora entra con su propio usuario y clave en «Entrar como administrador» y ve el mismo panel. Solo la clave principal puede crear, cambiar o quitar estas cuentas.</p>
+      <ul class="admcuentas" id="admcuentas"></ul>
+      <form class="admform" id="admcform" autocomplete="off">
+        <label class="small" for="admcnom">Usuario</label>
+        <input type="text" id="admcnom" placeholder="ej. coordinadora1" autocomplete="off" spellcheck="false" maxlength="40">
+        <label class="small" for="admcpw">Clave</label>
+        <input type="password" id="admcpw" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        <label class="small" for="admcpw2">Repetir clave</label>
+        <input type="password" id="admcpw2" autocomplete="new-password">
+        <button type="submit" class="btn primary" id="admcbtn">Guardar cuenta</button>
+        <p class="small admcerr" id="admcerr" role="status"></p>
+      </form>
+    </section>
   </div>
 </div>
 
@@ -1565,6 +1587,20 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
 .admdemo{margin:0;font-size:13px;color:#a6a3b3;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .admsec{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .admsec h2{margin:0;font-size:17px}
+.admnota{margin:0;color:#a6a3b3}
+.admcuentas{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.admcuentas li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border:1px solid #2c2440;border-radius:12px;padding:10px 12px;background:#14111f}
+.admcuentas li b{font-size:15px}
+.admcuentas li .acts{display:flex;gap:6px}
+.admcuentas li .acts .btn{padding:6px 11px;font-size:13px}
+.admcvacio{color:#8d86a8;font-size:14px}
+.admform{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px 10px;align-items:end}
+.admform label{grid-row:1}
+.admform input{grid-row:2;background:#14111f;border:1px solid #2c2440;border-radius:8px;padding:9px 11px;color:inherit;font:inherit;min-width:0}
+.admform .btn{grid-row:2}
+.admcerr{grid-column:1/-1;margin:0;min-height:1em;color:#F2D98E}
+.admquien{margin:4px 0 0;font-size:13px;color:#a6a3b3}
+@media (max-width:640px){ .admform{grid-template-columns:1fr} .admform label,.admform input,.admform .btn{grid-row:auto} }
 .admtbl{overflow:auto;border:1px solid #2c2440;border-radius:10px}
 .admtall{max-height:420px}
 .admtbl table{width:100%;border-collapse:collapse;font-size:14px}
@@ -1588,7 +1624,30 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
 (function(){
   const META=40;
   const $=id=>document.getElementById(id);
-  let PASS=null, DESDE='', HASTA='', ROWS=[], SEL=null, rango='sem';
+  let PASS=null, QUIEN='', DESDE='', HASTA='', ROWS=[], SEL=null, rango='sem';
+  // ---- cuentas de coordinadoras (solo con la clave principal) ----
+  async function cuentas(){
+    const sec=$('admcoord'); if(!sec) return;
+    if(QUIEN){ sec.hidden=true; return; }
+    let L; try{ L=(await rpc('reg_admin_cuentas',{}))||[]; }catch(e){ sec.hidden=true; return; }
+    sec.hidden=false; const ul=$('admcuentas'); ul.textContent='';
+    if(!L.length){ const li=document.createElement('li'); li.className='admcvacio'; li.textContent='Todavía no hay cuentas de coordinadoras. Crea la primera abajo.'; ul.appendChild(li); }
+    L.forEach(c=>{ const li=document.createElement('li'); const nb=document.createElement('b'); nb.textContent=c.nombre; const ac=document.createElement('span'); ac.className='acts';
+      const cb=document.createElement('button'); cb.type='button'; cb.className='btn'; cb.textContent='Cambiar clave'; cb.onclick=()=>{ $('admcnom').value=c.nombre; $('admcpw').value=''; $('admcpw2').value=''; $('admcpw').focus(); $('admcerr').textContent='Escribe la nueva clave para '+c.nombre+'.'; };
+      const qb=document.createElement('button'); qb.type='button'; qb.className='btn'; qb.textContent='Quitar'; qb.onclick=async()=>{ if(qb.dataset.c!=='1'){ qb.dataset.c='1'; qb.textContent='¿Quitar? Toca otra vez'; return; } try{ await rpc('reg_admin_quitar',{p_nombre:c.nombre}); $('admcerr').textContent='Cuenta de '+c.nombre+' quitada.'; }catch(e){ $('admcerr').textContent='No se pudo quitar. Revisa tu conexión.'; } cuentas(); };
+      qb.onblur=()=>{ qb.dataset.c=''; qb.textContent='Quitar'; };
+      ac.append(cb,qb); li.append(nb,ac); ul.appendChild(li); });
+  }
+  async function guardarCuenta(e){
+    e.preventDefault(); const er=$('admcerr'); const n=$('admcnom').value.trim().replace(/^@/,'').toLowerCase(), a=$('admcpw').value, b=$('admcpw2').value;
+    if(!n||/\s/.test(n)){ er.textContent='Escribe un usuario sin espacios.'; $('admcnom').focus(); return; }
+    if(a.length<6){ er.textContent='La clave debe tener al menos 6 caracteres.'; $('admcpw').focus(); return; }
+    if(a!==b){ er.textContent='Las dos claves no coinciden.'; $('admcpw2').focus(); return; }
+    $('admcbtn').disabled=true; er.textContent='Guardando…';
+    try{ await rpc('reg_admin_guardar',{p_nombre:n,p_clave:a}); er.textContent='Cuenta de '+n+' guardada. Ya puede entrar con su usuario y clave.'; $('admcnom').value=''; $('admcpw').value=''; $('admcpw2').value=''; }
+    catch(x){ const m=String(x&&x.message||''); er.textContent=/clave_corta/.test(m)?'La clave debe tener al menos 6 caracteres.':/nombre_invalido/.test(m)?'Ese usuario no es válido.':'No se pudo guardar. Revisa tu conexión.'; }
+    $('admcbtn').disabled=false; cuentas();
+  }
   const pad=n=>String(n).padStart(2,'0');
   const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
   const fdm=f=>f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(0,4);
@@ -2031,16 +2090,20 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     form.appendChild(b);
     let modoAdm=false; const un=$('loginuser'); const err=$('loginerr'); const btn=form.querySelector('button[type=submit],.btn.primary');
     const pw=document.createElement('input'); pw.type='password'; pw.id='loginpass'; pw.placeholder='Clave de administrador'; pw.autocomplete='current-password'; pw.setAttribute('aria-label','Clave de administrador'); pw.hidden=true;
-    un.after(pw);
+    const au=document.createElement('input'); au.type='text'; au.id='loginadmuser'; au.placeholder='Usuario de coordinadora (déjalo vacío si usas la clave principal)'; au.autocomplete='username'; au.spellcheck=false; au.setAttribute('aria-label','Usuario de coordinadora'); au.hidden=true;
+    un.after(au); au.after(pw);
     const orig=form.onsubmit;
-    b.onclick=()=>{ modoAdm=!modoAdm; un.hidden=modoAdm; pw.hidden=!modoAdm; b.textContent=modoAdm?'Volver: entrar como trabajador':'Entrar como administrador'; if(btn) btn.textContent=modoAdm?'Entrar al panel':'Entrar'; err.textContent=''; (modoAdm?pw:un).focus(); };
+    b.onclick=()=>{ modoAdm=!modoAdm; un.hidden=modoAdm; pw.hidden=!modoAdm; au.hidden=!modoAdm; b.textContent=modoAdm?'Volver: entrar como trabajador':'Entrar como administrador'; if(btn) btn.textContent=modoAdm?'Entrar al panel':'Entrar'; err.textContent=''; (modoAdm?au:un).focus(); };
     form.addEventListener('submit',async e=>{
       if(!modoAdm) return; e.preventDefault(); e.stopImmediatePropagation();
-      const p=pw.value; if(!p){ err.textContent='Escribe la clave.'; return; }
+      const quien=au.value.trim().replace(/^@/,'').toLowerCase(); const p0=pw.value; if(!p0){ err.textContent='Escribe la clave.'; return; }
+      const p=quien?quien+'\n'+p0:p0;
       err.textContent='Verificando…';
       let ok=false; try{ ok=await window.__reg.rpc('reg_admin_check',{p_code:window.__reg.code(),p_pass:p})===true; }catch(_){}
-      if(!ok){ err.textContent='Clave incorrecta.'; return; }
-      PASS=p; err.textContent=''; pw.value='';
+      if(!ok){ err.textContent=quien?'Usuario o clave incorrectos.':'Clave incorrecta.'; return; }
+      PASS=p; QUIEN=quien; err.textContent=''; pw.value=''; au.value='';
+      const kq=document.querySelector('.admkick'); if(kq) kq.textContent='Andes Panda · Administración'+(quien?' · Coordinadora: '+quien:' · Clave principal');
+      cuentas();
       $('login').hidden=true; const uc=$('userchip'); if(uc) uc.hidden=true; const rk=$('ranking'); if(rk) rk.hidden=true;
       $('admin').hidden=false; $('admdemo').hidden=!(window.REGISTRO_CONFIG&&window.REGISTRO_CONFIG.url==='local');
       setRango('sem');
@@ -2054,6 +2117,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     $('admexpone').onclick=async()=>{ if(SEL) await exportar([SEL]); };
     $('admseed').onclick=async()=>{ $('admseed').disabled=true; $('admseed').textContent='Cargando…'; await seed(); $('admseed').textContent='Datos cargados'; };
     $('admsalir').onclick=()=>{ PASS=null; location.reload(); };
+    $('admcform').addEventListener('submit',guardarCuenta);
   });
 })();
 </script>
