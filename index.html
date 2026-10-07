@@ -565,15 +565,16 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     const a=Object.assign({},args||{});
     if(a.p_user) a.p_user=(TIGER?PRE:'')+sinPre(a.p_user);
     if((fn==='reg_kv_get'||fn==='reg_kv_set')&&a.p_clave!=null){ const k=String(a.p_clave).replace(/^tiger:/,''); a.p_clave=TIGER?PRE+k:k; }
-    if((fn==='reg_admin_guardar'||fn==='reg_admin_quitar')&&a.p_nombre) a.p_nombre=(TIGER?PRE:'')+sinPre(a.p_nombre);
-    if(typeof a.p_pass==='string'){ const i=a.p_pass.indexOf('\n'); if(i>=0) a.p_pass=(TIGER?PRE:'')+sinPre(a.p_pass.slice(0,i))+a.p_pass.slice(i); }
+    // Las cuentas de coordinadoras (Grecia, Karen…) son las mismas para Andes Panda y Andes Tiger.
+    if((fn==='reg_admin_guardar'||fn==='reg_admin_quitar')&&a.p_nombre) a.p_nombre=sinPre(a.p_nombre);
+    if(typeof a.p_pass==='string'){ const i=a.p_pass.indexOf('\n'); if(i>=0) a.p_pass=sinPre(a.p_pass.slice(0,i))+a.p_pass.slice(i); }
     let r;
     if(fn==='reg_ranking'){ try{ r=await llamar('reg_ranking_marca',Object.assign({},a,{p_tiger:TIGER})); }catch(e){ r=await llamar('reg_ranking',a); } }
     else r=await llamar(fn,a);
     const mio=v=>String(v||'').startsWith(PRE)===TIGER, limpio=v=>TIGER?String(v).slice(PRE.length):v;
     if(Array.isArray(r)){
       if(fn==='reg_ranking'||fn==='reg_admin_list') r=r.filter(x=>mio(x.usuario)).map(x=>Object.assign({},x,{usuario:limpio(x.usuario)}));
-      else if(fn==='reg_admin_cuentas') r=r.filter(x=>mio(x.nombre)).map(x=>Object.assign({},x,{nombre:limpio(x.nombre)}));
+      else if(fn==='reg_admin_cuentas') r=r.filter(x=>!String(x.nombre||'').startsWith(PRE));
     }
     return r;
   }
@@ -1606,7 +1607,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       <div class="admsec">
         <h2 id="admcoordhd">Cuentas de coordinadoras</h2>
       </div>
-      <p class="small admnota">Cada coordinadora entra con su propio usuario y clave en «Entrar como administrador» y ve el mismo panel. Solo la clave principal puede crear, cambiar o quitar estas cuentas.</p>
+      <p class="small admnota">Cada coordinadora entra con su propio usuario y clave en «Entrar como administrador» y ve el mismo panel. Su cuenta sirve para Andes Panda y para Andes Tiger. Solo la clave principal puede crear, cambiar o quitar estas cuentas.</p>
       <ul class="admcuentas" id="admcuentas"></ul>
       <form class="admform" id="admcform" autocomplete="off">
         <label class="small" for="admcnom">Usuario</label>
