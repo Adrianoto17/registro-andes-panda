@@ -1505,7 +1505,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
         <p class="admkick">Andes Panda · Administración</p>
         <h1 class="admtitle">Panel de administrador</h1>
       </div>
-      <button type="button" class="btn" id="admsalir">Salir</button>
+      <div class="admhbtns"><button type="button" class="btn primary" id="admreg" hidden>Ir a mi Registro</button><button type="button" class="btn" id="admsalir">Salir</button></div>
     </header>
 
     <section class="panel admctl" aria-label="Periodo">
@@ -1603,6 +1603,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
 .admdemo{margin:0;font-size:13px;color:#a6a3b3;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .admsec{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .admsec h2{margin:0;font-size:17px}
+.admhbtns{display:flex;gap:8px;flex-wrap:wrap}
 .admnota{margin:0;color:#a6a3b3}
 .admcuentas{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .admcuentas li{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border:1px solid #2c2440;border-radius:12px;padding:10px 12px;background:#14111f}
@@ -1645,6 +1646,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   async function cuentas(){
     const sec=$('admcoord'); if(!sec) return;
     const mia=$('admmia'); if(mia) mia.hidden=!QUIEN;
+    const rg=$('admreg'); if(rg) rg.hidden=!QUIEN;
     if(QUIEN){ sec.hidden=true; return; }
     let L; try{ L=(await rpc('reg_admin_cuentas',{}))||[]; }catch(e){ sec.hidden=true; return; }
     sec.hidden=false; const ul=$('admcuentas'); ul.textContent='';
@@ -2145,6 +2147,8 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     $('admsalir').onclick=()=>{ PASS=null; location.reload(); };
     $('admcform').addEventListener('submit',guardarCuenta);
     $('admmform').addEventListener('submit',miClave);
+    // La coordinadora también puede registrar contactos y buscar creadores como un agente más, con su propio nombre.
+    $('admreg').onclick=()=>{ if(!QUIEN) return; try{ localStorage.setItem('registroUsuario',QUIEN); localStorage.setItem('registroActividad',String(Date.now())); localStorage.setItem('registroVista','registro'); }catch(e){} location.reload(); };
   });
 })();
 </script>
