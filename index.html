@@ -565,6 +565,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     if(fn==='reg_admin_check') return admOk(a.p_pass);
     if(fn==='reg_admin_cuentas'){ if(a.p_pass!=='admin123') throw {code:'P0001',message:'solo_maestro'}; return Object.keys(d.adm||{}).sort().map(n=>({nombre:n,creado:null})); }
     if(fn==='reg_admin_guardar'){ if(a.p_pass!=='admin123') throw {code:'P0001',message:'solo_maestro'}; const n=String(a.p_nombre||'').trim().toLowerCase(); if(!n||/\s/.test(n)) throw {message:'nombre_invalido'}; if(String(a.p_clave||'').length<6) throw {message:'clave_corta'}; d.adm=d.adm||{}; d.adm[n]=a.p_clave; lsave(d); return null; }
+    if(fn==='reg_admin_mi_clave'){ const pp=String(a.p_pass||''), i=pp.indexOf('\n'); if(i<0||!admOk(pp)) throw {message:'clave_admin_invalida'}; if(String(a.p_nueva||'').length<6) throw {message:'clave_corta'}; d.adm[pp.slice(0,i).trim().toLowerCase()]=a.p_nueva; lsave(d); return null; }
     if(fn==='reg_admin_quitar'){ if(a.p_pass!=='admin123') throw {code:'P0001',message:'solo_maestro'}; if(d.adm) delete d.adm[String(a.p_nombre||'').trim().toLowerCase()]; lsave(d); return null; }
     if(fn==='reg_admin_list'){ if(!admOk(a.p_pass)) throw {code:'invalid_argument',message:'clave'}; return d.r.filter(x=>(!a.p_user||x.usuario===a.p_user)&&x.fecha>=a.p_desde&&x.fecha<=a.p_hasta).map(x=>Object.assign({},x)); }
     if(fn==='reg_kv_get') return d.kv[a.p_clave]??null;
@@ -1551,6 +1552,21 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       </table></div>
     </section>
 
+    <section class="panel" id="admmia" hidden aria-labelledby="admmiahd">
+      <div class="admsec">
+        <h2 id="admmiahd">Mi cuenta</h2>
+      </div>
+      <p class="small admnota">Puedes cambiar tu clave cuando quieras. Solo tú la conoces.</p>
+      <form class="admform" id="admmform" autocomplete="off">
+        <label class="small" for="admmpw">Nueva clave</label>
+        <input type="password" id="admmpw" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        <label class="small" for="admmpw2">Repetir nueva clave</label>
+        <input type="password" id="admmpw2" autocomplete="new-password">
+        <button type="submit" class="btn primary" id="admmbtn">Cambiar mi clave</button>
+        <p class="small admcerr" id="admmerr" role="status"></p>
+      </form>
+    </section>
+
     <section class="panel" id="admcoord" hidden aria-labelledby="admcoordhd">
       <div class="admsec">
         <h2 id="admcoordhd">Cuentas de coordinadoras</h2>
@@ -1628,6 +1644,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   // ---- cuentas de coordinadoras (solo con la clave principal) ----
   async function cuentas(){
     const sec=$('admcoord'); if(!sec) return;
+    const mia=$('admmia'); if(mia) mia.hidden=!QUIEN;
     if(QUIEN){ sec.hidden=true; return; }
     let L; try{ L=(await rpc('reg_admin_cuentas',{}))||[]; }catch(e){ sec.hidden=true; return; }
     sec.hidden=false; const ul=$('admcuentas'); ul.textContent='';
@@ -1637,6 +1654,15 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       const qb=document.createElement('button'); qb.type='button'; qb.className='btn'; qb.textContent='Quitar'; qb.onclick=async()=>{ if(qb.dataset.c!=='1'){ qb.dataset.c='1'; qb.textContent='¿Quitar? Toca otra vez'; return; } try{ await rpc('reg_admin_quitar',{p_nombre:c.nombre}); $('admcerr').textContent='Cuenta de '+c.nombre+' quitada.'; }catch(e){ $('admcerr').textContent='No se pudo quitar. Revisa tu conexión.'; } cuentas(); };
       qb.onblur=()=>{ qb.dataset.c=''; qb.textContent='Quitar'; };
       ac.append(cb,qb); li.append(nb,ac); ul.appendChild(li); });
+  }
+  async function miClave(e){
+    e.preventDefault(); const er=$('admmerr'), a=$('admmpw').value, b=$('admmpw2').value;
+    if(a.length<6){ er.textContent='La clave debe tener al menos 6 caracteres.'; $('admmpw').focus(); return; }
+    if(a!==b){ er.textContent='Las dos claves no coinciden.'; $('admmpw2').focus(); return; }
+    $('admmbtn').disabled=true; er.textContent='Guardando…';
+    try{ await rpc('reg_admin_mi_clave',{p_nueva:a}); PASS=QUIEN+'\n'+a; er.textContent='Listo: tu clave cambió. La próxima vez entra con la nueva.'; $('admmpw').value=''; $('admmpw2').value=''; }
+    catch(x){ er.textContent=/clave_corta/.test(String(x&&x.message||''))?'La clave debe tener al menos 6 caracteres.':'No se pudo cambiar. Revisa tu conexión.'; }
+    $('admmbtn').disabled=false;
   }
   async function guardarCuenta(e){
     e.preventDefault(); const er=$('admcerr'); const n=$('admcnom').value.trim().replace(/^@/,'').toLowerCase(), a=$('admcpw').value, b=$('admcpw2').value;
@@ -2118,6 +2144,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     $('admseed').onclick=async()=>{ $('admseed').disabled=true; $('admseed').textContent='Cargando…'; await seed(); $('admseed').textContent='Datos cargados'; };
     $('admsalir').onclick=()=>{ PASS=null; location.reload(); };
     $('admcform').addEventListener('submit',guardarCuenta);
+    $('admmform').addEventListener('submit',miClave);
   });
 })();
 </script>
