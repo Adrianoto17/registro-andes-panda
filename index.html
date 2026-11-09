@@ -1197,7 +1197,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
       h.append(p);
     }
   }
-  // Índice de búsqueda: se arma una vez (y cuando cambia la base o los agregados), no en cada tecla.
+  // Índice de búsqueda (v2): se arma una vez (y cuando cambia la base o los agregados), no en cada tecla.
   let IDX=null, idxExtra=null, idxBase=-1;
   function indice(){
     if(IDX&&idxExtra===extra&&idxBase===base.size) return IDX;
