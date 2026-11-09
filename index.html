@@ -402,6 +402,7 @@ tbody tr:hover td{background:#201a30}
     <button type="button" class="vbtn" id="vcon" data-vista="consultas" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 1 1 21 11.5z"/></svg><span>Consultas</span><span class="vbadge" id="conbadge" hidden></span></button>
     <button type="button" class="vbtn" id="vgan" data-vista="ganadores" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4"/></svg><span>Ganadores</span></button>
     <button type="button" class="vbtn" id="vpag" data-vista="pagos" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/><path d="M16 15h2"/></svg><span>Pagos</span><span class="vbadge" id="pagbadge" hidden></span></button>
+    <button type="button" class="vbtn" id="vayu" data-vista="ayuda" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9"/><path d="M12 17.2h.01"/></svg><span>Ayuda</span></button>
   </nav>
 
   <div class="meta panel" id="meta">
@@ -414,7 +415,7 @@ tbody tr:hover td{background:#201a30}
         <input type="text" id="nombre" placeholder="Nombre de TikTok (ej. katgia_1)" aria-label="Nombre de TikTok" aria-describedby="hint" role="combobox" aria-autocomplete="list" aria-controls="sugg" aria-expanded="false" spellcheck="false" autocapitalize="off">
         <div class="sugg" id="sugg" role="listbox" hidden></div>
       </div>
-      <input type="text" id="codigo" class="codein" placeholder="Código (si no está en la base)" aria-label="Código de creador" inputmode="numeric" hidden>
+      <input type="text" id="codigo" class="codein" placeholder="Código: número o texto (se guarda en la base)" aria-label="Código de creador, número o texto" maxlength="40" hidden>
       <input type="text" id="motivo" class="motin" list="motivos-list" placeholder="Motivo de comunicación (ej. Reporte de métricas)" aria-label="Motivo de comunicación">
       <button class="btn primary" type="submit" id="addbtn">Registrar</button>
     </form>
@@ -764,7 +765,11 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   // Fecha del día del registro en formato DÍA/MES/AÑO (ej. 27/09/2026).
   const fechaDMY=f=>f?f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(0,4):'';
   const hora=ts=>ts?new Intl.DateTimeFormat('es-PE',{timeZone:TZ,hour:'numeric',minute:'2-digit'}).format(new Date(ts)):'—';  const norm=s=>(s||'').trim().replace(/^@/,'').toLowerCase();
-  const isCode=s=>/^(\d{15,20}|externo)$/i.test((s||'').trim()); // EXTERNO = creadores externos sin ID
+  // Código del creador: el ID de TikTok (números) o cualquier texto (ej. EXTERNO, una nota). Máximo 40 caracteres.
+  const isCode=s=>{ s=String(s||'').trim(); return s.length>0&&s.length<=40; };
+  async function guardarCodigoEnBase(n,c){ // queda guardado para la próxima vez que alguien busque a este creador
+    try{ const next=JSON.parse(JSON.stringify(extra)); next[norm(n)]={nombre:n,codigo:c}; extra=next; await db.doc('base/extra').set({items:next}); return true; }catch(e){ return false; }
+  }
 
   let base=new Map(), extra={}, db=null, unsubDay=null, rows=[], fecha=todayLima(), canWrite=true;
 
@@ -995,7 +1000,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   async function guardarEdicion(r,nombre,codigo,motivo){
     const n=String(nombre||'').trim().replace(/^@/,''), c=String(codigo||'').replace(/\s+/g,''), m=String(motivo||'').trim();
     if(!n){ toast('Escribe el nombre de TikTok.'); return; }
-    if(c&&!isCode(c)){ toast('El ID de creador debe tener entre 15 y 20 dígitos.'); return; }
+    if(c&&!isCode(c)){ toast('El código puede tener como máximo 40 caracteres.'); return; }
     if(rows.some(x=>x.id!==r.id&&norm(x.nombre)===norm(n))){ toast(n+' ya está registrado este día.'); return; }
     const f=lookup(n); const codGuardar=c&&(!f||f.codigo!==c)?c:(f?'':c);
     editId=null;
@@ -1003,7 +1008,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     catch(e){ editId=r.id; render(); writeErr(e); return; }
     render();
     if(m) learnMotivo(m);
-    if(c&&(!f||f.codigo!==c)){ try{ const next=JSON.parse(JSON.stringify(extra)); next[norm(n)]={nombre:n,codigo:c}; await db.doc('base/extra').set({items:next}); }catch(e){} }
+    if(c&&(!f||f.codigo!==c)) await guardarCodigoEnBase(n,c);
     toast('Registro actualizado: '+n);
   }
   function render(){
@@ -1152,10 +1157,10 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
   }
   async function saveCode(r,val){
     const v=(val||'').trim();
-    if(!isCode(v)){ toast('El código debe tener entre 15 y 20 dígitos.'); return; }
+    if(!isCode(v)){ toast(v?'El código puede tener como máximo 40 caracteres.':'Escribe el código (número o texto).'); return; }
     try{ await mutateDay(cur=>{ const x=cur.registros.find(q=>q.id===r.id); if(x) x.codigo=v; }); }
     catch(e){ writeErr(e); return; }
-    try{ const next=JSON.parse(JSON.stringify(extra)); next[norm(r.nombre)]={nombre:r.nombre,codigo:v}; await db.doc('base/extra').set({items:next}); }catch(e){}
+    await guardarCodigoEnBase(r.nombre,v);
     toast('Código guardado para '+r.nombre);
   }
 
@@ -1263,13 +1268,13 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     const n=limpiarNombre($('nombre').value); if(!n) return;
     const code=$('codigo').value.trim();
     if($('motivo').value.includes('____')){ toast('Completa el nombre del evento en el motivo (reemplaza ____).'); $('motivo').focus(); return; }
-    if(code&&!isCode(code)){ toast('El código debe tener entre 15 y 20 dígitos.'); return; }
+    if(code&&!isCode(code)){ toast('El código puede tener como máximo 40 caracteres.'); return; }
     // Creador sin código conocido: pedir confirmación una vez (se registra al volver a pulsar Registrar/Enter).
     const hit=lookup(n), f=$('addform');
     if(!code&&!(hit&&hit.codigo)&&!rows.some(r=>norm(r.nombre)===norm(n))){
       if(f.dataset.sinCodigo!==norm(n)){
         f.dataset.sinCodigo=norm(n);
-        const msg='«'+n+'» no tiene código en la base. Escríbelo, o pulsa Registrar otra vez para guardarlo sin código.';
+        const msg='«'+n+'» no tiene código en la base. Escríbelo (número o texto) y quedará guardado para la próxima vez, o pulsa Registrar otra vez para guardarlo sin código.';
         const h=$('hint'); h.className='hint warn'; h.textContent=msg; toast(msg);
         $('codigo').hidden=false; $('codigo').focus(); return;
       }
@@ -1278,6 +1283,7 @@ window.__MOTIVOS__=[["Reporte de métricas", 510], ["Seguimiento de cuenta", 156
     $('addbtn').disabled=true;
     const ok=await addNames([{nombre:n,codigo:code,motivo:$('motivo').value}]);
     $('addbtn').disabled=false;
+    if(ok&&code&&(!hit||hit.codigo!==code)){ const nb=hit?hit.nombre:n.replace(/^@/,''); if(await guardarCodigoEnBase(nb,code)) toast('Registrado y guardado en la base: '+nb+' · '+code); }
     if(ok){ $('nombre').value=''; $('codigo').value=''; $('motivo').value=''; cerrarSugg(); updateHint(); }
     $('nombre').focus();
   });
@@ -2668,7 +2674,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   const ocultables=()=>[$('meta'),document.querySelector('section[aria-label="Agregar registro"]'),document.querySelector('section[aria-label="Registros del día"]'),document.querySelector('header .datebox')].filter(Boolean);
   // Secciones de la plataforma. "registro" y "calendario" las maneja este archivo; el resto, vercel/plataforma.html
   // (escucha el evento "registro:vista").
-  const VISTAS=['inicio','registro','calendario','creadores','premios','consultas','ganadores','pagos'];
+  const VISTAS=['inicio','registro','calendario','creadores','premios','consultas','ganadores','pagos','ayuda'];
   function ver(v,guardar){
     vista=VISTAS.includes(v)?v:'inicio';
     const reg=vista==='registro', cal=vista==='calendario';
@@ -4167,6 +4173,301 @@ html.crmlock{overflow:hidden}
     let n=0; setInterval(()=>{ if(!usuario()||document.hidden||guardando) return; if(!visible&&(++n%3)) return; cargar(); },20000);
     document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&usuario()) cargar(); });
   }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(iniciar,0)); else setTimeout(iniciar,0);
+})();
+</script>
+<style>
+/* ===== Sección Ayuda (preguntas frecuentes con buscador inteligente) ===== */
+#vista-ayuda{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+#vista-ayuda>*{min-width:0}
+#vista-ayuda[hidden]{display:none!important}
+.ayq{display:grid;gap:8px;padding:16px;border:1px solid #2c2440;border-radius:16px;background:rgb(25 21 38 / .85)}
+.ayq label{font-size:13px;font-weight:600;color:#a6a3b3}
+.ayq input{width:100%;box-sizing:border-box;background:#14111f;border:1px solid #2c2440;border-radius:12px;padding:13px 14px;color:#f1effa;font:inherit;font-size:16px}
+.ayq input:focus-visible{outline:2px solid #7c5cff;outline-offset:1px;border-color:#7c5cff}
+.ayq .ayhint{margin:0;font-size:12.5px;color:#8d86a8}
+.aycats{display:flex;flex-wrap:wrap;gap:8px}
+.aycats button{border:1px solid #3a2f63;background:#14111f;color:#c9c4de;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.aycats button[aria-pressed="true"]{background:#2a2150;border-color:#7c5cff;color:#f1effa}
+.aylista{display:grid;gap:10px}
+.aycard{border:1px solid #2c2440;border-radius:14px;background:rgb(25 21 38 / .85);overflow:hidden}
+.aycard>summary{list-style:none;cursor:pointer;padding:13px 16px;display:flex;gap:10px;align-items:flex-start;font-weight:700;color:#f1effa;font-size:15px}
+.aycard>summary::-webkit-details-marker{display:none}
+.aycard>summary::before{content:'+';flex:none;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;background:#241d3f;color:#c9b8ff;font-size:14px;line-height:1}
+.aycard[open]>summary::before{content:'–'}
+.aycard>summary:focus-visible{outline:2px solid #7c5cff;outline-offset:-2px}
+.aycard .aybody{padding:0 16px 14px 46px;display:grid;gap:8px}
+.aycard .ayr{margin:0;white-space:pre-wrap;line-height:1.55;color:#e4e1f0;font-size:14.5px}
+.aymeta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:#8d86a8}
+.aychip{font-size:12px;color:#c9c4de;background:#241d3f;border:1px solid #3a2f63;border-radius:999px;padding:2px 9px}
+.aycard.top{border-color:#7c5cff;box-shadow:0 0 0 1px rgb(124 92 255 / .25)}
+.aynada{border:1px dashed #3a2f63;border-radius:14px;padding:16px;display:grid;gap:10px;background:rgb(20 17 31 / .6)}
+.aynada p{margin:0;color:#c9c4de}
+.ayotra{justify-self:start;background:none;border:0;color:#a996ff;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:2px 0}
+.ayh3{margin:4px 0 0;font-size:15px;color:#f1effa}
+.aymias{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.aymias li{border:1px solid #2c2440;border-radius:12px;padding:10px 12px;background:#14111f;display:grid;gap:4px;font-size:14px}
+.aymias .est{font-size:12px;font-weight:700;color:#F2D98E}
+.aymias .est.ok{color:#8fe0bc}
+.aymias .resp{white-space:pre-wrap;color:#e4e1f0;margin:0}
+/* panel de coordinadoras */
+.ayadm .ayform{display:grid;gap:8px}
+.ayadm .ayform label{font-size:13px;font-weight:600;color:#a6a3b3}
+.ayadm .ayform input,.ayadm .ayform textarea{width:100%;box-sizing:border-box;background:#14111f;border:1px solid #2c2440;border-radius:10px;padding:10px 12px;color:inherit;font:inherit;font-size:14.5px}
+.ayadm .ayform textarea{min-height:120px;resize:vertical;line-height:1.5}
+.ayadm .ayform .ayfbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ayadm .ayitems,.ayadm .aypend{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.ayadm .ayitems li,.ayadm .aypend li{border:1px solid #2c2440;border-radius:12px;padding:10px 12px;background:#14111f;display:grid;gap:6px}
+.ayadm .ayitems li b,.ayadm .aypend li b{font-size:14.5px}
+.ayadm .ayitems .ayprev{margin:0;font-size:13px;color:#a6a3b3;white-space:pre-wrap;max-height:3.2em;overflow:hidden}
+.ayadm .ayacts{display:flex;gap:6px;flex-wrap:wrap}
+.ayadm .ayacts .btn{padding:6px 11px;font-size:13px}
+.ayadm .aysub{margin:6px 0 0;font-size:14px;color:#f1effa}
+.ayadm .aycount{display:inline-block;min-width:20px;padding:1px 7px;border-radius:999px;background:#7c5cff;color:#fff;font-size:12px;margin-left:6px;text-align:center}
+.ayadm .ayerr{margin:0;min-height:1em;font-size:13px;color:#F2D98E}
+@media (max-width:640px){ .aycard .aybody{padding-left:16px} }
+html[data-marca="tiger"] .ayq,html[data-marca="tiger"] .aycard{border-color:#3c3128;background:rgb(35 29 24 / .85)}
+html[data-marca="tiger"] .ayq input,html[data-marca="tiger"] .ayadm .ayform input,html[data-marca="tiger"] .ayadm .ayform textarea,html[data-marca="tiger"] .aymias li,html[data-marca="tiger"] .ayadm .ayitems li,html[data-marca="tiger"] .ayadm .aypend li,html[data-marca="tiger"] .aycats button{background:#1d1813;border-color:#3c3128}
+html[data-marca="tiger"] .ayq input:focus-visible{outline-color:#ff9d5c;border-color:#ff9d5c}
+html[data-marca="tiger"] .aycats button[aria-pressed="true"]{background:#493728;border-color:#ff9d5c}
+html[data-marca="tiger"] .aycard>summary::before,html[data-marca="tiger"] .aychip{background:#3a2d22;color:#ffebbd;border-color:#5b4837}
+html[data-marca="tiger"] .aycard.top{border-color:#ff9d5c;box-shadow:0 0 0 1px rgb(255 157 92 / .25)}
+html[data-marca="tiger"] .ayotra{color:#ffb27a}
+html[data-marca="tiger"] .ayadm .aycount{background:#ee7727}
+html[data-marca="tiger"] .aynada{border-color:#5b4837;background:rgb(29 24 19 / .6)}
+</style>
+<script>
+// ===== Ayuda: preguntas frecuentes con buscador inteligente (sin IA, gratis) =====
+// Las coordinadoras escriben preguntas y respuestas en su panel; los agentes buscan con sus palabras.
+// Datos en registro_kv: 'ayuda' (preguntas y respuestas) y 'ayuda_pend' (preguntas enviadas por agentes).
+// En Andes Tiger el prefijo 'tiger:' lo pone solo window.__reg.rpc, así cada agencia tiene su propia ayuda.
+(function(){
+  const $=id=>document.getElementById(id);
+  const CLAVE='ayuda', CLAVEP='ayuda_pend';
+  const usuario=()=>(window.__reg&&window.__reg.user&&window.__reg.user())||'';
+  const rpc=(fn,a)=>window.__reg.rpc(fn,Object.assign({p_code:window.__reg.code()},a));
+  const nid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+  function h(tag,props,...kids){
+    const el=document.createElement(tag);
+    if(props) for(const [k,v] of Object.entries(props)){
+      if(v==null||v===false) continue;
+      if(k==='class') el.className=v; else if(k==='text') el.textContent=v;
+      else if(k.startsWith('on')) el.addEventListener(k.slice(2),v);
+      else el.setAttribute(k,v===true?'':v);
+    }
+    kids.flat().forEach(c=>{ if(c==null||c===false) return; el.appendChild(typeof c==='string'?document.createTextNode(c):c); });
+    return el;
+  }
+  function avisar(msg,ms){
+    if(typeof window.toast==='function'){ window.toast(msg,ms); return; }
+    const t=$('toast'); if(t){ t.textContent=msg; t.hidden=false; clearTimeout(avisar._t); avisar._t=setTimeout(()=>{ t.hidden=true; },ms||2800); }
+  }
+  const fecha=ts=>{ try{ return new Intl.DateTimeFormat('es-PE',{timeZone:'America/Lima',day:'numeric',month:'short'}).format(new Date(ts)); }catch(e){ return ''; } };
+
+  // ---------- contenido inicial (uso de la plataforma). Las coordinadoras pueden editarlo o quitarlo. ----------
+  const INICIAL=[
+    {cat:'Plataforma',p:'¿Cómo registro a un creador?',r:'En la pestaña Registro escribe su nombre de TikTok (o pega el enlace de su perfil), elige el que aparece en la lista, escribe el motivo y pulsa «Registrar» o Enter.',tags:'agregar anotar contacto registrar'},
+    {cat:'Plataforma',p:'¿Qué hago si el creador no aparece en la base?',r:'Escribe su nombre completo y pulsa Registrar. Te pedirá el ID de creador (15 a 20 dígitos): escríbelo si lo tienes. Si no lo tienes, pulsa Registrar otra vez y se guarda sin código. Si es un creador externo, en el código escribe EXTERNO.',tags:'no sale no encuentro falta id codigo nuevo externo'},
+    {cat:'Plataforma',p:'¿Cómo corrijo o quito un registro?',r:'En la lista del día usa «Editar» o «Quitar» en la fila del creador. Si lo quitaste por error, pulsa «Deshacer» en el aviso que aparece abajo.',tags:'borrar eliminar error equivocado cambiar editar'},
+    {cat:'Plataforma',p:'¿Cómo descargo mis registros en Excel?',r:'En Registro, en «Exportar a Excel», elige Día, Semana, Mes o Historial y se descarga el archivo.',tags:'exportar excel descargar reporte semana mes'},
+    {cat:'Plataforma',p:'¿Cómo cambio entre Andes Panda y Andes Tiger?',r:'Toca «Cambiar» abajo a la derecha. Al entrar de nuevo, elige tu agencia en «¿A qué Andes perteneces?».',tags:'agencia tiger panda cambiar cuenta salir'},
+    {cat:'Plataforma',p:'¿Los demás pueden ver mi calendario o mis pagos?',r:'No. El calendario (batallas, eventos, premios) y los pagos son personales: cada uno ve solo lo suyo.',tags:'privado calendario pagos batallas ver otros'}
+  ].map((x,i)=>Object.assign({id:'ini'+i,por:'',ts:''},x));
+
+  // ---------- datos ----------
+  let D=null, P=null; // D={v,items:[]}, P={v,items:[]}
+  const vacioD=()=>({v:1,items:INICIAL.map(x=>Object.assign({},x))});
+  const vacioP=()=>({v:1,items:[]});
+  async function leer(){
+    const [a,b]=await Promise.all([rpc('reg_kv_get',{p_clave:CLAVE}),rpc('reg_kv_get',{p_clave:CLAVEP})]);
+    D=a&&Array.isArray(a.items)?a:vacioD(); P=b&&Array.isArray(b.items)?b:vacioP();
+  }
+  // Lee lo último, aplica el cambio y guarda (para no pisar lo que otra persona guardó recién).
+  async function cambiarD(fn){ const a=await rpc('reg_kv_get',{p_clave:CLAVE}); const d=a&&Array.isArray(a.items)?a:vacioD(); fn(d); await rpc('reg_kv_set',{p_clave:CLAVE,p_valor:d}); D=d; }
+  async function cambiarP(fn){ const a=await rpc('reg_kv_get',{p_clave:CLAVEP}); const d=a&&Array.isArray(a.items)?a:vacioP(); fn(d);
+    const lim=Date.now()-45*864e5; d.items=d.items.filter(x=>!x.rts||Date.parse(x.rts)>lim).slice(-300);
+    await rpc('reg_kv_set',{p_clave:CLAVEP,p_valor:d}); P=d; }
+
+  // ---------- buscador ----------
+  const STOP=new Set(('a al algo algun alguna como con cual cuales cuando de del donde el ella ellos en entre era es esa ese eso esta estan este esto estos ha hay he la las le les lo los mas me mi mis muy ni no nos o otra otro para pero poco por porque que quien se ser si sin sobre son su sus tambien te ti tu tus un una unas uno unos y ya yo hago hacer hace puedo puede debo debe tengo tiene quiero necesito saber cosa cosas favor hola buenas').split(' '));
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9ñ]+/g,' ').trim();
+  const raiz=w=>{ if(w.length>5&&w.endsWith('es')) return w.slice(0,-2); if(w.length>3&&w.endsWith('s')) return w.slice(0,-1); return w; };
+  const toks=s=>norm(s).split(' ').filter(w=>w&&!STOP.has(w)).map(raiz);
+  function parecido(a,b){
+    if(a===b) return 1;
+    const n=Math.min(a.length,b.length);
+    if(n>=4&&a.slice(0,Math.min(n,5))===b.slice(0,Math.min(n,5))) return .75;
+    if(n>=4&&(a.includes(b)||b.includes(a))) return .55;
+    if(n>=5&&a.slice(0,4)===b.slice(0,4)) return .45; // banearon ~ baneo, sanciones ~ sancionar
+    return 0;
+  }
+  function buscar(q,items){
+    const qt=[...new Set(toks(q))]; if(!qt.length) return [];
+    const nq=norm(q);
+    const docs=items.map(it=>({it,p:toks(it.p),t:toks(it.tags),c:toks(it.cat),r:toks(it.r)}));
+    const N=docs.length||1;
+    const idf={}; qt.forEach(w=>{ const df=docs.filter(d=>d.p.concat(d.t,d.c,d.r).some(x=>parecido(w,x)>0)).length; idf[w]=Math.log(1+N/(1+df))+.2; });
+    return docs.map(d=>{
+      let s=0, hit=0, tot=0;
+      qt.forEach(w=>{ const m=f=>d[f].reduce((mx,x)=>Math.max(mx,parecido(w,x)),0);
+        const best=Math.max(m('p')*3,m('t')*2.5,m('c')*2,m('r')*1.2); tot+=idf[w]; if(best>0) hit+=idf[w]; s+=best*idf[w]; });
+      if(nq.length>5&&norm(d.it.p).includes(nq)) s+=6;
+      const cov=tot?hit/tot:0; // cobertura pesada: las palabras raras (ej. «infracción») cuentan más que las comunes (ej. «creador»)
+      return {it:d.it,s:s*(.4+cov),cov};
+    }).filter(x=>x.s>0&&x.cov>=(qt.length>=4?.4:.5)).sort((a,b)=>b.s-a.s)
+      .filter((x,i,arr)=>x.s>=arr[0].s*.35);
+  }
+
+  // ---------- vista de agentes ----------
+  let visible=false, query='', cat='', abiertoPrimero=true;
+  function tarjeta(it,top,abierta){
+    const meta=h('div',{class:'aymeta'},it.cat?h('span',{class:'aychip',text:it.cat}):null,it.por?h('span',{text:'Respondió '+it.por+(it.ts?' · '+fecha(it.ts):'')}):null);
+    return h('details',{class:'aycard'+(top?' top':''),open:abierta||null},h('summary',null,it.p),h('div',{class:'aybody'},h('p',{class:'ayr',text:it.r}),meta));
+  }
+  function cajaEnviar(texto,compacto){
+    const q=String(texto||'').trim();
+    const enviar=async b=>{ if(!q||!usuario()) return; b.disabled=true; b.textContent='Enviando…';
+      try{ await cambiarP(d=>{ d.items.push({id:nid(),q:q.slice(0,500),por:usuario(),ts:new Date().toISOString()}); }); avisar('Pregunta enviada a las coordinadoras. Cuando la respondan, la verás aquí.',3500); query=''; const i=$('ayqin'); if(i) i.value=''; pintar(); }
+      catch(e){ b.disabled=false; b.textContent='Enviar mi pregunta a las coordinadoras'; avisar('No se pudo enviar. Revisa tu conexión.'); } };
+    if(compacto) return h('button',{type:'button',class:'ayotra',onclick:e=>enviar(e.currentTarget)},'¿No es lo que buscabas? Envía tu pregunta a las coordinadoras');
+    return h('div',{class:'aynada'},h('p',null,'No encontré una respuesta para eso todavía.'),
+      h('button',{type:'button',class:'btn primary',onclick:e=>enviar(e.currentTarget)},'Enviar mi pregunta a las coordinadoras'));
+  }
+  function pintarResultados(){
+    const box=$('ayres'); if(!box||!D) return; box.textContent='';
+    const items=D.items;
+    if(query.trim()){
+      const r=buscar(query,items).slice(0,5);
+      if(!r.length){ box.appendChild(cajaEnviar(query)); return; }
+      box.appendChild(h('p',{class:'ayhint',style:'margin:0;font-size:13px;color:#8d86a8',text:r.length===1?'Encontré esta respuesta:':'Estas son las respuestas más parecidas:'}));
+      r.forEach((x,i)=>box.appendChild(tarjeta(x.it,i===0,i===0)));
+      box.appendChild(cajaEnviar(query,true));
+      return;
+    }
+    const lista=cat?items.filter(x=>(x.cat||'Otros')===cat):items;
+    if(!lista.length){ box.appendChild(h('p',{class:'aynada',text:'Todavía no hay preguntas en esta categoría.'})); return; }
+    lista.forEach(x=>box.appendChild(tarjeta(x,false,false)));
+  }
+  function pintarCats(){
+    const c=$('aycats'); if(!c||!D) return; c.textContent='';
+    const cats=[...new Set(D.items.map(x=>x.cat||'Otros'))].sort((a,b)=>a.localeCompare(b,'es'));
+    if(cats.length<2||query.trim()){ c.hidden=true; return; } c.hidden=false;
+    [['','Todas'],...cats.map(x=>[x,x])].forEach(([v,t])=>c.appendChild(h('button',{type:'button','aria-pressed':String(cat===v),onclick:()=>{ cat=v; pintarCats(); pintarResultados(); }},t)));
+  }
+  function pintarMias(){
+    const box=$('aymias'); if(!box||!P||!D) return; box.textContent='';
+    const u=usuario(); const mias=P.items.filter(x=>x.por===u).slice(-10).reverse();
+    if(!mias.length){ box.hidden=true; return; } box.hidden=false;
+    box.appendChild(h('h3',{class:'ayh3',text:'Mis preguntas enviadas'}));
+    const ul=h('ul',{class:'aymias'});
+    mias.forEach(x=>{ const it=x.resp&&D.items.find(i=>i.id===x.resp);
+      ul.appendChild(h('li',null,h('span',{class:'est'+(it?' ok':''),text:it?'Respondida':x.desc?'Revisada por coordinación':'Esperando respuesta'}),h('b',{text:x.q}),it?h('p',{class:'resp',text:it.r}):null)); });
+    box.appendChild(ul);
+  }
+  function pintar(){
+    const s=$('vista-ayuda'); if(!s) return;
+    if(!s.dataset.listo){
+      s.dataset.listo='1';
+      const inp=h('input',{type:'search',id:'ayqin',placeholder:'Ej. ¿qué hago si un creador tiene una infracción?',autocomplete:'off',enterkeyhint:'search'});
+      let t; inp.addEventListener('input',()=>{ clearTimeout(t); t=setTimeout(()=>{ query=inp.value; pintarCats(); pintarResultados(); },160); });
+      inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); clearTimeout(t); query=inp.value; pintarCats(); pintarResultados(); } });
+      s.append(
+        h('div',{class:'phead'},h('div',null,h('h2',{tabindex:'-1',text:'Ayuda'}),h('p',{text:'Escribe tu duda con tus palabras y te muestro la respuesta que dejaron las coordinadoras.'}))),
+        h('div',{class:'ayq'},h('label',{for:'ayqin'},'¿Qué necesitas saber?'),inp,h('p',{class:'ayhint',text:'Si no aparece la respuesta, puedes enviar tu pregunta y las coordinadoras la responden.'})),
+        h('div',{class:'aycats',id:'aycats',role:'group','aria-label':'Categorías'}),
+        h('div',{class:'aylista',id:'ayres','aria-live':'polite'}),
+        h('div',{id:'aymias',hidden:true}));
+    }
+    pintarCats(); pintarResultados(); pintarMias();
+  }
+  async function cargar(){ if(!window.__reg||!usuario()) return; try{ await leer(); }catch(e){ if(!D){ D=vacioD(); P=vacioP(); } }
+    const s=$('vista-ayuda'); const escribiendo=s&&s.contains(document.activeElement)&&document.activeElement.id!=='ayqin'&&/INPUT|TEXTAREA/.test(document.activeElement.tagName);
+    if(visible&&!escribiendo) pintar(); pintarAdmin(); }
+  function mostrar(v){ visible=v==='ayuda'; const s=$('vista-ayuda'); if(s) s.hidden=!visible; if(visible){ if(D) pintar(); cargar(); } }
+
+  // ---------- panel de coordinadoras ----------
+  let editando=null;
+  const quien=()=>{ const k=document.querySelector('.admkick'); const m=k&&/Coordinadora:\s*(\S+)/.exec(k.textContent); return m?m[1]:'Coordinación'; };
+  function montarAdmin(){
+    const wrap=document.querySelector('#admin .admwrap'); if(!wrap||$('admayuda')) return;
+    const sec=h('section',{class:'panel ayadm',id:'admayuda','aria-labelledby':'admayudahd'},
+      h('div',{class:'admsec'},h('h2',{id:'admayudahd'},'Centro de ayuda',h('span',{class:'aycount',id:'aypendn',hidden:true}))),
+      h('p',{class:'small admnota',text:'Lo que escriban aquí lo ven todos los agentes de Andes Panda en la pestaña «Ayuda». Escribe la pregunta como la haría un agente y agrega otras palabras con las que podrían buscarla.'}),
+      h('div',{id:'aypendbox'}),
+      h('h3',{class:'aysub',id:'ayformt',text:'Nueva pregunta'}),
+      h('form',{class:'ayform',id:'ayform',autocomplete:'off'},
+        h('label',{for:'ayfp'},'Pregunta'),h('input',{type:'text',id:'ayfp',maxlength:'300',placeholder:'Ej. ¿Qué hago si un creador recibe una infracción?'}),
+        h('label',{for:'ayfr'},'Respuesta'),h('textarea',{id:'ayfr',maxlength:'4000',placeholder:'Explica paso a paso lo que debe hacer el agente.'}),
+        h('label',{for:'ayfc'},'Categoría (opcional)'),h('input',{type:'text',id:'ayfc',maxlength:'40',list:'ayfcl',placeholder:'Ej. Infracciones, Pagos, Batallas'}),h('datalist',{id:'ayfcl'}),
+        h('label',{for:'ayft'},'Otras palabras para encontrarla (opcional)'),h('input',{type:'text',id:'ayft',maxlength:'300',placeholder:'Ej. sanción, baneo, penalización, strike'}),
+        h('div',{class:'ayfbtns'},h('button',{type:'submit',class:'btn primary',id:'ayfbtn'},'Guardar pregunta'),h('button',{type:'button',class:'btn',id:'ayfcancel',hidden:true},'Cancelar')),
+        h('p',{class:'ayerr',id:'ayferr',role:'status'})),
+      h('h3',{class:'aysub',id:'ayitemst',text:'Preguntas publicadas'}),
+      h('ul',{class:'ayitems',id:'ayitems'}));
+    wrap.appendChild(sec);
+    $('ayform').addEventListener('submit',guardar);
+    $('ayfcancel').onclick=()=>limpiarForm();
+  }
+  function limpiarForm(){ editando=null; ['ayfp','ayfr','ayfc','ayft'].forEach(i=>$(i).value=''); $('ayformt').textContent='Nueva pregunta'; $('ayfcancel').hidden=true; $('ayfbtn').textContent='Guardar pregunta'; delete $('ayform').dataset.pend; }
+  function editar(it,pend){
+    editando=it?it.id:null; $('ayfp').value=it?it.p:(pend?pend.q:''); $('ayfr').value=it?it.r:''; $('ayfc').value=it?it.cat||'':''; $('ayft').value=it?it.tags||'':'';
+    if(pend) $('ayform').dataset.pend=pend.id; else delete $('ayform').dataset.pend;
+    $('ayformt').textContent=it?'Editar pregunta':pend?'Responder la pregunta de '+pend.por:'Nueva pregunta'; $('ayfcancel').hidden=false; $('ayfbtn').textContent=pend?'Publicar respuesta':'Guardar cambios';
+    $('ayferr').textContent=''; $('ayform').scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>$(it||!pend?'ayfp':'ayfr').focus(),250);
+  }
+  async function guardar(e){
+    e.preventDefault(); const er=$('ayferr');
+    const p=$('ayfp').value.trim(), r=$('ayfr').value.trim(), c=$('ayfc').value.trim(), t=$('ayft').value.trim(), pend=$('ayform').dataset.pend;
+    if(!p){ er.textContent='Escribe la pregunta.'; $('ayfp').focus(); return; }
+    if(!r){ er.textContent='Escribe la respuesta.'; $('ayfr').focus(); return; }
+    $('ayfbtn').disabled=true; er.textContent='Guardando…';
+    try{
+      const id=editando||nid(), ts=new Date().toISOString(), por=quien();
+      await cambiarD(d=>{ const x=d.items.find(i=>i.id===id); const nuevo={id,p,r,cat:c,tags:t,por,ts}; if(x) Object.assign(x,nuevo); else d.items.unshift(nuevo); });
+      if(pend) await cambiarP(d=>{ const x=d.items.find(i=>i.id===pend); if(x){ x.resp=id; x.rts=ts; } });
+      er.textContent=pend?'Respuesta publicada. El agente ya la puede ver.':'Guardado. Ya aparece en «Ayuda».'; limpiarForm();
+    }catch(x){ er.textContent='No se pudo guardar. Revisa tu conexión.'; }
+    $('ayfbtn').disabled=false; pintarAdmin(); if(visible) pintar();
+  }
+  function confirmar(b,txt,fn){ b.onclick=async()=>{ if(b.dataset.c!=='1'){ b.dataset.c='1'; b.textContent='¿Seguro? Toca otra vez'; return; } b.disabled=true; await fn(); }; b.onblur=()=>{ b.dataset.c=''; b.textContent=txt; }; return b; }
+  function pintarAdmin(){
+    const sec=$('admayuda'); if(!sec||!D||!P) return;
+    const pend=P.items.filter(x=>!x.resp&&!x.desc);
+    const n=$('aypendn'); n.hidden=!pend.length; n.textContent=pend.length;
+    const pb=$('aypendbox'); pb.textContent='';
+    if(pend.length){
+      pb.appendChild(h('h3',{class:'aysub',text:'Preguntas de agentes sin responder'}));
+      const ul=h('ul',{class:'aypend'});
+      pend.forEach(x=>ul.appendChild(h('li',null,h('b',{text:x.q}),h('span',{class:'small',style:'color:#8d86a8',text:'De '+x.por+' · '+fecha(x.ts)}),
+        h('div',{class:'ayacts'},h('button',{type:'button',class:'btn primary',onclick:()=>editar(null,x)},'Responder'),
+          confirmar(h('button',{type:'button',class:'btn'},'Descartar'),'Descartar',async()=>{ try{ await cambiarP(d=>{ const y=d.items.find(i=>i.id===x.id); if(y){ y.desc=1; y.rts=new Date().toISOString(); } }); }catch(e){ avisar('No se pudo. Revisa tu conexión.'); } pintarAdmin(); })))));
+      pb.appendChild(ul);
+    }
+    const dl=$('ayfcl'); dl.textContent=''; [...new Set(D.items.map(x=>x.cat).filter(Boolean))].forEach(c=>dl.appendChild(h('option',{value:c})));
+    $('ayitemst').textContent='Preguntas publicadas ('+D.items.length+')';
+    const ul=$('ayitems'); ul.textContent='';
+    if(!D.items.length) ul.appendChild(h('li',{class:'admcvacio',text:'Todavía no hay preguntas. Crea la primera arriba.'}));
+    D.items.forEach(it=>ul.appendChild(h('li',null,h('b',{text:it.p}),h('p',{class:'ayprev',text:it.r}),
+      h('div',{class:'ayacts'},it.cat?h('span',{class:'aychip',text:it.cat}):null,h('button',{type:'button',class:'btn',onclick:()=>editar(it)},'Editar'),
+        confirmar(h('button',{type:'button',class:'btn'},'Quitar'),'Quitar',async()=>{ try{ await cambiarD(d=>{ d.items=d.items.filter(i=>i.id!==it.id); }); if(editando===it.id) limpiarForm(); }catch(e){ avisar('No se pudo quitar. Revisa tu conexión.'); } pintarAdmin(); if(visible) pintar(); })))));
+  }
+  async function abrirAdmin(){ montarAdmin(); try{ await leer(); }catch(e){ if(!D){ D=vacioD(); P=vacioP(); } } pintarAdmin(); }
+
+  // ---------- arranque ----------
+  function iniciar(){
+    if(!$('vayu')) return;
+    const ancla=$('vista-pagos')||$('vista-ganadores')||$('calendario');
+    if(!ancla){ setTimeout(iniciar,150); return; }
+    if(!$('vista-ayuda')){ const s=h('section',{class:'pv',id:'vista-ayuda','aria-label':'Ayuda',hidden:true}); ancla.after(s); }
+    document.addEventListener('registro:vista',e=>mostrar(e.detail));
+    if(window.__cal&&window.__cal.vista) mostrar(window.__cal.vista());
+    // Panel de coordinadoras: al abrirse, mostrar el centro de ayuda.
+    const adm=$('admin'); let antes=true;
+    if(adm) setInterval(()=>{ const oculto=adm.hidden; if(antes&&!oculto&&window.__reg) abrirAdmin(); antes=oculto; },700);
+    let n=0; setInterval(()=>{ if(document.hidden) return; const admOn=adm&&!adm.hidden; if(!visible&&!admOn&&(++n%4)) return; if(admOn){ const a=document.activeElement; if(a&&$('admayuda')&&$('admayuda').contains(a)&&/INPUT|TEXTAREA/.test(a.tagName)) return; abrirAdmin(); } else if(usuario()) cargar(); },30000);
+  }
+  window.__ayuda={buscar:(q)=>D?buscar(q,D.items).map(x=>x.it.p):[]};
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(iniciar,0)); else setTimeout(iniciar,0);
 })();
 </script>
