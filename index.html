@@ -4509,5 +4509,40 @@ html[data-marca="tiger"] .aynada{border-color:#5b4837;background:rgb(29 24 19 / 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',montar); else montar();
 })();
 </script>
+<style>
+/* ===== Ojito para ver/ocultar claves ===== */
+.pwwrap{position:relative;display:block;width:100%}
+.pwwrap[hidden]{display:none!important}
+.admform .pwwrap{grid-row:2;min-width:0}
+@media (max-width:640px){ .admform .pwwrap{grid-row:auto} }
+.pwwrap>input{width:100%;box-sizing:border-box;padding-right:46px!important}
+.pwojo{position:absolute;top:50%;right:4px;transform:translateY(-50%);width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:#a6a3b3;cursor:pointer;padding:0}
+.pwojo:hover{color:#f1effa;background:rgb(255 255 255 / .06)}
+.pwojo:focus-visible{outline:2px solid #7c5cff;outline-offset:1px}
+.pwojo svg{width:20px;height:20px}
+html[data-marca="tiger"] .pwojo:focus-visible{outline-color:#ff9d5c}
+</style>
+<script>
+// Añade un botón de ojo a cada campo de clave (también a los que se crean después, como el del login).
+(function(){
+  const OJO='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const TACHADO='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.5 0-10-7-10-7a18.6 18.6 0 0 1 4.1-5.1M9.9 5.2A9.6 9.6 0 0 1 12 5c6.5 0 10 7 10 7a18.7 18.7 0 0 1-2.2 3.2M14.1 14.1a3 3 0 1 1-4.2-4.2"/><path d="M2 2l20 20"/></svg>';
+  function pintar(inp,b){ const v=inp.type==='text'; b.innerHTML=v?TACHADO:OJO; b.setAttribute('aria-label',v?'Ocultar clave':'Mostrar clave'); b.setAttribute('aria-pressed',String(v)); b.title=v?'Ocultar clave':'Mostrar clave'; }
+  function mejorar(inp){
+    if(inp.dataset.ojo) return; inp.dataset.ojo='1';
+    const w=document.createElement('span'); w.className='pwwrap'; w.hidden=inp.hidden;
+    inp.parentNode.insertBefore(w,inp); w.appendChild(inp);
+    const b=document.createElement('button'); b.type='button'; b.className='pwojo'; w.appendChild(b); pintar(inp,b);
+    b.addEventListener('click',()=>{ inp.type=inp.type==='password'?'text':'password'; pintar(inp,b); inp.focus(); });
+    // si el campo se oculta/muestra, el ojo lo acompaña
+    new MutationObserver(()=>{ w.hidden=inp.hidden; }).observe(inp,{attributes:true,attributeFilter:['hidden']});
+    // al enviar el formulario vuelve a ocultarse
+    if(inp.form) inp.form.addEventListener('submit',()=>{ if(inp.type==='text'){ inp.type='password'; pintar(inp,b); } });
+  }
+  function revisar(){ document.querySelectorAll('input[type=password]:not([data-ojo])').forEach(mejorar); }
+  function iniciar(){ revisar(); new MutationObserver(revisar).observe(document.body,{childList:true,subtree:true}); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
 </body>
 </html>
