@@ -396,6 +396,7 @@ tbody tr:hover td{background:#201a30}
   <nav class="vistas" id="vistas" aria-label="Secciones">
     <button type="button" class="vbtn" id="vreg" data-vista="registro" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/></svg><span>Registro</span></button>
     <button type="button" class="vbtn" id="vbat" data-vista="batallas" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5 18 3h3v3l-3.5 3.5"/><path d="m5 14 4 4M7 17l-3 3M3 19l2 2"/></svg><span>Batallas</span></button>
+    <button type="button" class="vbtn" id="vdia" data-vista="diamantes" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M12 21 8 9l4-6 4 6z"/></svg><span>Diamantes</span></button>
     <button type="button" class="vbtn" id="vayu" data-vista="ayuda" aria-pressed="false"><svg class="vico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.3-2.5 3.9"/><path d="M12 17.2h.01"/></svg><span>Ayuda</span></button>
   </nav>
 
@@ -2684,7 +2685,7 @@ h1 .hl{background:none!important;-webkit-background-clip:initial;background-clip
   const ocultables=()=>[$('meta'),document.querySelector('section[aria-label="Agregar registro"]'),document.querySelector('section[aria-label="Registros del día"]'),document.querySelector('header .datebox')].filter(Boolean);
   // Secciones de la plataforma. "registro" y "calendario" las maneja este archivo; el resto, vercel/plataforma.html
   // (escucha el evento "registro:vista").
-  const VISTAS=['registro','batallas','ayuda']; // el Calendario se reemplazó por Batallas // Inicio, Creadores, Premios, Consultas y Ganadores se quitaron
+  const VISTAS=['registro','batallas','diamantes','ayuda']; // el Calendario se reemplazó por Batallas // Inicio, Creadores, Premios, Consultas y Ganadores se quitaron
   function ver(v,guardar){
     vista=VISTAS.includes(v)?v:'registro';
     const reg=vista==='registro', cal=vista==='calendario';
@@ -5043,6 +5044,255 @@ html[data-marca="tiger"] .pwojo:focus-visible{outline-color:#ff9d5c}
   function revisar(){ document.querySelectorAll('input[type=password]:not([data-ojo])').forEach(mejorar); }
   function iniciar(){ revisar(); new MutationObserver(revisar).observe(document.body,{childList:true,subtree:true}); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
+<style>
+/* ===== Diamantes: cuántos diamantes lanzó cada persona a sus creadores (individual) ===== */
+#vista-diamantes{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+#vista-diamantes>*{min-width:0}
+#vista-diamantes[hidden]{display:none!important}
+.dmform input[type=number]{width:100%;box-sizing:border-box;background:#14111f;border:1px solid #2c2440;border-radius:10px;padding:10px 12px;color:#f1effa;font:inherit;font-size:14.5px;min-height:44px;font-variant-numeric:tabular-nums}
+.dmform input[type=number]:focus-visible{outline:2px solid #7c5cff;outline-offset:1px;border-color:#7c5cff}
+.dmkpi b{display:flex;align-items:center;gap:6px}
+.dmkpi b svg{width:18px;height:18px;flex:none;color:#7fd8ff}
+.dmcant{font-weight:800;color:#7fd8ff;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dmid{display:block;font-size:11.5px;color:#8d86a8;font-family:var(--mono,monospace)}
+.dmmes{background:#14111f;border:1px solid #2c2440;border-radius:10px;padding:8px 12px;color:inherit;font:inherit;font-size:14px}
+.dmbar2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+html[data-marca="tiger"] .dmform input[type=number],html[data-marca="tiger"] .dmmes{background:#1d1813;border-color:#3c3128}
+html[data-marca="tiger"] .dmform input[type=number]:focus-visible{outline-color:#ff9d5c;border-color:#ff9d5c}
+.dmtop{display:grid;gap:10px;padding:16px;border:1px solid #2c2440;border-radius:16px;background:rgb(25 21 38 / .85)}
+.dmtop h3{margin:0;font-size:16px;color:#f1effa}
+.dmtop ol{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.dmtop li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;background:rgb(255 255 255 / .03)}
+.dmtop .pos{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;font-weight:800;background:#241d3f;color:#c9b8ff}
+.dmtop li:nth-child(1) .pos{background:#F2D98E;color:#1a1612}
+.dmtop li:nth-child(2) .pos{background:#d7d9e0;color:#1a1612}
+.dmtop li:nth-child(3) .pos{background:#d8a47a;color:#1a1612}
+.dmtop .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;color:#f1effa}
+.dmtop .nm small{font-weight:500;color:#8d86a8;margin-left:6px}
+.dmtop .bar{grid-column:2/4;height:6px;border-radius:99px;background:#241d3f;overflow:hidden}
+.dmtop .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#7c5cff,#7fd8ff)}
+.dmtop .vacio{margin:0;font-size:13.5px;color:#a6a3b3}
+.dmtophd{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.dmtop li.yo .nm{color:#7fd8ff}
+html[data-marca="tiger"] .dmtop{border-color:#3c3128;background:rgb(35 29 24 / .85)}
+html[data-marca="tiger"] .dmtop .pos,html[data-marca="tiger"] .dmtop .bar{background:#3a2d22;color:#ffebbd}
+html[data-marca="tiger"] .dmtop .bar i{background:linear-gradient(90deg,#ff9d5c,#7fd8ff)}
+.dmlista{display:grid;gap:14px}
+.dmvacio{margin:0;padding:26px 16px;text-align:center;color:#a6a3b3;border:1px dashed #3a2f63;border-radius:16px}
+.dmdia{border:1px solid #2c2440;border-radius:16px;background:rgb(25 21 38 / .85);overflow:hidden}
+.dmdiahd{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 16px;background:#14111f;border-bottom:1px solid #2c2440}
+.dmdiat{display:flex;align-items:baseline;gap:8px}
+.dmdiat b{font-size:15px;color:#f1effa}
+.dmdiat small{font-size:12px;color:#8d86a8}
+.dmdiatot{display:flex;align-items:center;gap:6px;font-weight:800;color:#7fd8ff;font-variant-numeric:tabular-nums}
+.dmdiatot svg{width:16px;height:16px}
+.dmdiatot small{font-weight:600;color:#8d86a8}
+.dmenv{list-style:none;margin:0;padding:6px}
+.dmitem{display:grid;grid-template-columns:40px minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:10px;border-radius:12px}
+.dmitem+.dmitem{border-top:1px solid #211b36}
+.dmitem:hover{background:rgb(124 92 255 / .06)}
+.dmav{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:16px;color:#fff;background:linear-gradient(135deg,#7c5cff,#3fb8e8)}
+.dmwho{min-width:0;display:grid;gap:2px}
+.dmwho b{font-size:14.5px;color:#f1effa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dmwho small{font-size:11.5px;color:#8d86a8;font-family:var(--mono,monospace);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dmchip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:rgb(127 216 255 / .1);border:1px solid rgb(127 216 255 / .35);color:#7fd8ff;font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dmchip svg{width:15px;height:15px}
+.dmev{justify-self:start;max-width:100%;font-size:12px;font-weight:600;color:#e9d9a8;background:rgb(242 217 142 / .1);border:1px solid rgb(242 217 142 / .3);border-radius:999px;padding:1px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dmquitar{border:1px solid #3a2f63;background:transparent;color:#a6a3b3;border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer;min-height:32px}
+.dmquitar:hover{color:#f1effa;border-color:#7c5cff}
+.dmquitar.conf{color:#F4A39C;border-color:#F4A39C}
+.dmquitar:focus-visible{outline:2px solid #7c5cff;outline-offset:1px}
+@media (max-width:560px){ .dmitem{grid-template-columns:36px minmax(0,1fr) auto;gap:8px 10px} .dmav{width:36px;height:36px;font-size:14px} .dmquitar{grid-column:2/4;justify-self:start} .dmwho small{white-space:normal;word-break:break-all} }
+html[data-marca="tiger"] .dmdia,html[data-marca="tiger"] .dmvacio{border-color:#3c3128;background:rgb(35 29 24 / .85)}
+html[data-marca="tiger"] .dmdiahd{background:#1d1813;border-color:#3c3128}
+html[data-marca="tiger"] .dmitem+.dmitem{border-color:#3c3128}
+html[data-marca="tiger"] .dmav{background:linear-gradient(135deg,#ff9d5c,#ee7727)}
+html[data-marca="tiger"] .dmquitar{border-color:#5b4837}
+</style>
+<script>
+// ===== Diamantes =====
+// Registro individual: cada persona anota a qué creador le lanzó diamantes, cuántos y qué día. Solo ve los suyos.
+// Se guarda en registro_kv por persona y mes: 'diamantes:<usuario>:AAAA-MM' → {v:1,items:[{id,u,cid,n,f,ev,por,ts}]}.
+// Para el Top de POC se guarda además un resumen del equipo: 'diamantes_top:AAAA-MM' → {usuario:{'AAAA-MM-DD':total}}.
+// Cada persona solo actualiza su propia parte (se recalcula desde sus registros, así siempre cuadra).
+// En Andes Tiger el prefijo 'tiger:' lo pone solo window.__reg.rpc.
+(function(){
+  const $=id=>document.getElementById(id);
+  const usuario=()=>(window.__reg&&window.__reg.user&&window.__reg.user())||'';
+  const rpc=(fn,a)=>window.__reg.rpc(fn,Object.assign({p_code:window.__reg.code()},a));
+  const hoyLima=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Lima'}).format(new Date());
+  const clave=mes=>'diamantes:'+usuario()+':'+mes;
+  const fdm=f=>{ const p=String(f||'').split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:''; };
+  const norm=s=>String(s||'').trim().replace(/^@/,'').toLowerCase();
+  const cap=s=>String(s||'').charAt(0).toUpperCase()+String(s||'').slice(1);
+  const num=n=>Number(n||0).toLocaleString('es-PE');
+  const MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const etiquetaDia=f=>{ const hoy=hoyLima(); const ay=new Date(hoy+'T12:00:00Z'); ay.setUTCDate(ay.getUTCDate()-1); if(f===hoy) return 'Hoy'; if(f===ay.toISOString().slice(0,10)) return 'Ayer'; try{ const s=new Intl.DateTimeFormat('es-PE',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'}).format(new Date(f+'T12:00:00Z')); return s.charAt(0).toUpperCase()+s.slice(1); }catch(e){ return fdm(f); } };
+  const horaDe=ts=>{ try{ return ts?new Intl.DateTimeFormat('es-PE',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'America/Lima'}).format(new Date(ts)):''; }catch(e){ return ''; } };
+  const nomMes=m=>{ const p=String(m||'').split('-'); return p.length===2?MESES[Number(p[1])-1]+' '+p[0]:m; };
+  const ICO='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M12 21 8 9l4-6 4 6z"/></svg>';
+  function h(tag,props,...kids){ const el=document.createElement(tag); if(props) for(const [k,v] of Object.entries(props)){ if(v==null||v===false) continue; if(k==='class') el.className=v; else if(k==='text') el.textContent=v; else if(k==='html') el.innerHTML=v; else if(k.startsWith('on')) el.addEventListener(k.slice(2),v); else el.setAttribute(k,v===true?'':v); } kids.flat().forEach(c=>{ if(c==null||c===false) return; el.appendChild(typeof c==='string'?document.createTextNode(c):c); }); return el; }
+  function avisar(m){ const t=$('toast'); if(!t) return; t.textContent=m; t.hidden=false; clearTimeout(avisar._t); avisar._t=setTimeout(()=>{ t.hidden=true; },2400); }
+
+  let D=null, mesVer=hoyLima().slice(0,7), visible=false, busca='', quien='', cargando=0;
+  const vacio=()=>({v:1,items:[]});
+  async function leer(mes){ const v=await rpc('reg_kv_get',{p_clave:clave(mes)}); return v&&Array.isArray(v.items)?v:vacio(); }
+  async function cargar(){
+    if(!window.__reg||!usuario()) return; const t=++cargando, m=mesVer;
+    try{ const v=await leer(m); if(t!==cargando||m!==mesVer) return; D=v;
+      const sk=usuario()+'|'+m; if(m===hoyLima().slice(0,7)&&sincronizado!==sk){ sincronizado=sk; sincTop(m,v).then(()=>cargarTop()).catch(()=>{}); } }catch(e){ if(!D) D=vacio(); }
+    if(visible) pintarLista();
+  }
+  // Lee lo último guardado antes de escribir (por si la misma persona tiene la página abierta en dos equipos).
+  async function cambiar(mes,fn){ const v=await leer(mes); fn(v); await rpc('reg_kv_set',{p_clave:clave(mes),p_valor:v}); if(mes===mesVer){ D=v; pintarLista(); } try{ await sincTop(mes,v); }catch(e){} cargarTop(); }
+  // ---------- Top de POC (todo el equipo) ----------
+  const claveTop=mes=>'diamantes_top:'+mes;
+  async function leerTop(mes){ const v=await rpc('reg_kv_get',{p_clave:claveTop(mes)}); return v&&typeof v==='object'&&!Array.isArray(v)?v:{}; }
+  async function sincTop(mes,v){
+    const yo=usuario(); if(!yo) return; const dias={}; (v.items||[]).forEach(x=>{ dias[x.f]=(dias[x.f]||0)+(Number(x.n)||0); });
+    const t=await leerTop(mes); const antes=JSON.stringify(t[yo]||{}); if(Object.keys(dias).length) t[yo]=dias; else delete t[yo];
+    if(JSON.stringify(t[yo]||{})===antes) return; await rpc('reg_kv_set',{p_clave:claveTop(mes),p_valor:t});
+  }
+  let periodo='dia', TOP=null, sincronizado='';
+  function semana(){ const hoy=hoyLima(); const dt=new Date(hoy+'T12:00:00Z'); const dow=(dt.getUTCDay()+6)%7; const r=[]; for(let i=0;i<=dow;i++){ const x=new Date(dt); x.setUTCDate(dt.getUTCDate()-dow+i); r.push(x.toISOString().slice(0,10)); } return r; }
+  async function cargarTop(){
+    if(!window.__reg||!usuario()) return; const hoy=hoyLima(), sem=semana(); const meses=[...new Set([hoy.slice(0,7),...sem.map(f=>f.slice(0,7))])];
+    try{ const L=await Promise.all(meses.map(leerTop)); const T={}; L.forEach(o=>Object.entries(o).forEach(([u,ds])=>{ T[u]=Object.assign(T[u]||{},ds); })); TOP=T; }catch(e){ if(!TOP) TOP={}; }
+    if(visible) pintarTop();
+  }
+  function pintarTop(){
+    const box=$('dmtopl'); if(!box) return;
+    document.querySelectorAll('#dmper button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.k===periodo)));
+    if(!TOP){ box.replaceChildren(h('p',{class:'vacio',text:'Cargando…'})); return; }
+    const hoy=hoyLima(), mes=hoy.slice(0,7), sem=new Set(semana()), yo=usuario();
+    const ok=f=>periodo==='dia'?f===hoy:periodo==='semana'?sem.has(f):f.slice(0,7)===mes;
+    const T=Object.entries(TOP).map(([u,ds])=>({u,n:Object.entries(ds).filter(([f])=>ok(f)).reduce((s,[,n])=>s+(Number(n)||0),0)})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
+    box.replaceChildren(...(T.length?[h('ol',null,T.map((g,i)=>h('li',{class:g.u===yo?'yo':null},h('span',{class:'pos',text:String(i+1)}),h('span',{class:'nm'},cap(g.u),g.u===yo?h('small',{text:'(tú)'}):null),h('span',{class:'dmcant',text:num(g.n)}))))]:[h('p',{class:'vacio',text:periodo==='dia'?'Hoy todavía nadie registra diamantes.':periodo==='semana'?'Esta semana todavía nadie registra diamantes.':'Este mes todavía nadie registra diamantes.'})]));
+  }
+
+  // ---------- autocompletar creador con la base ----------
+  function sugerir(inp,box,idInp){
+    let ms=[],a=-1;
+    const pintar=()=>{ box.textContent=''; ms.forEach((m,i)=>box.appendChild(h('button',{type:'button',role:'option','aria-selected':String(i===a),onmousedown:e=>{ e.preventDefault(); elegir(i); }},h('span',{text:m[0]}),h('small',{text:m[1]||''})))); box.hidden=!ms.length; };
+    const elegir=i=>{ inp.value=ms[i][0]; idInp.value=ms[i][1]||''; ms=[]; box.hidden=true; const sig=$('dmn'); if(sig) sig.focus(); };
+    inp.addEventListener('input',()=>{ idInp.value=''; const k=norm(inp.value); a=-1; if(k.length<2){ ms=[]; pintar(); return; }
+      const L=(window.__BASE__||[]).filter(([n,c])=>norm(n).includes(k)||String(c||'').startsWith(k));
+      ms=(window.__orden?window.__orden(L,k,x=>norm(x[0]),x=>String(x[1]||'')):L).slice(0,8); pintar(); });
+    inp.addEventListener('keydown',e=>{ if(box.hidden) return; if(e.key==='ArrowDown'){ e.preventDefault(); a=Math.min(a+1,ms.length-1); pintar(); } else if(e.key==='ArrowUp'){ e.preventDefault(); a=Math.max(a-1,0); pintar(); } else if(e.key==='Enter'&&a>=0){ e.preventDefault(); elegir(a); } else if(e.key==='Escape'){ box.hidden=true; } });
+    inp.addEventListener('blur',()=>setTimeout(()=>{ box.hidden=true; },120));
+  }
+  // Si escribieron el usuario o el ID a mano, completa el otro con la base.
+  function completar(u,cid){
+    const B=window.__BASE__||[];
+    if(cid&&!u){ const x=B.find(r=>String(r[1])===cid); if(x) return [x[0],cid]; }
+    if(u&&!cid){ const k=norm(u); const x=B.find(r=>norm(r[0])===k); if(x) return [x[0],String(x[1]||'')]; if(/^\d{6,}$/.test(k)){ const y=B.find(r=>String(r[1])===k); if(y) return [y[0],k]; } }
+    return [u,cid];
+  }
+
+  // ---------- formulario ----------
+  function formulario(){
+    const u=h('input',{type:'text',id:'dmu',autocomplete:'off',spellcheck:'false',placeholder:'Usuario o ID del creador','aria-autocomplete':'list'});
+    const cid=h('input',{type:'hidden',id:'dmcid'});
+    const box=h('div',{class:'btsug',role:'listbox',hidden:true});
+    const n=h('input',{type:'number',id:'dmn',min:'1',step:'1',inputmode:'numeric',placeholder:'Ej. 500'});
+    const dia=h('input',{type:'date',id:'dmdia'}); dia.value=hoyLima(); dia.max=hoyLima();
+    const ev=h('input',{type:'text',id:'dmev',autocomplete:'off',maxlength:'60',placeholder:'Ej. Batalla oficial'});
+    const btn=h('button',{type:'submit',class:'btn primary',id:'dmbtn'},'Registrar diamantes');
+    const f=h('form',{class:'btform dmform',id:'dmform',autocomplete:'off'},
+      h('h3',{text:'Registrar diamantes lanzados'}),
+      h('div',{class:'btgrid'},
+        h('div',{class:'btf'},h('label',{for:'dmu'},'Creador'),u,cid,box),
+        h('div',{class:'btf'},h('label',{for:'dmn'},'Cantidad de diamantes'),n),
+        h('div',{class:'btf'},h('label',{for:'dmev'},'Nombre del evento'),ev),
+        h('div',{class:'btf'},h('label',{for:'dmdia'},'Fecha'),dia)),
+      h('div',{class:'btacts'},btn),
+      h('p',{class:'bterr',id:'dmerr',role:'status'}));
+    sugerir(u,box,cid);
+    f.addEventListener('submit',e=>{ e.preventDefault(); guardar(); });
+    f.addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target.tagName==='INPUT'&&!e.defaultPrevented){ e.preventDefault(); guardar(); } });
+    return f;
+  }
+  async function guardar(){
+    const er=$('dmerr'); let u=$('dmu').value.trim().replace(/^@/,''), cid=$('dmcid').value.trim(); const nv=$('dmn').value.trim(), f=$('dmdia').value, ev=$('dmev').value.trim().slice(0,60);
+    [u,cid]=completar(u,cid);
+    const n=Math.round(Number(nv));
+    if(!u){ er.textContent='Escribe el usuario o ID del creador.'; $('dmu').focus(); return; }
+    if(!nv||!isFinite(n)||n<=0){ er.textContent='Escribe cuántos diamantes (un número mayor a 0).'; $('dmn').focus(); return; }
+    if(!ev){ er.textContent='Escribe el nombre del evento.'; $('dmev').focus(); return; }
+    if(!f){ er.textContent='Elige la fecha.'; $('dmdia').focus(); return; }
+    if(f>hoyLima()){ er.textContent='La fecha no puede ser futura.'; $('dmdia').focus(); return; }
+    $('dmbtn').disabled=true; er.textContent='Guardando…';
+    const item={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),u,cid,n,f,ev,por:usuario(),ts:new Date().toISOString()};
+    try{ await cambiar(f.slice(0,7),v=>{ v.items.push(item); });
+      avisar(num(n)+' diamantes registrados para @'+u);
+      $('dmu').value=''; $('dmcid').value=''; $('dmn').value=''; $('dmev').value=''; er.textContent=''; $('dmu').focus();
+      if(f.slice(0,7)!==mesVer){ mesVer=f.slice(0,7); const mi=$('dmmes'); if(mi) mi.value=mesVer; D=null; cargar(); }
+    }catch(e){ er.textContent='No se pudo guardar. Revisa tu conexión.'; }
+    $('dmbtn').disabled=false;
+  }
+
+  // ---------- resumen y lista ----------
+  function pintarLista(){
+    const tb=$('dmrows'); if(!tb) return;
+    if(!D){ tb.replaceChildren(h('p',{class:'dmvacio',text:'Cargando…'})); return; }
+    const hoy=hoyLima(), items=D.items, esMesActual=mesVer===hoy.slice(0,7);
+    const totMes=items.reduce((s,x)=>s+(Number(x.n)||0),0), totHoy=items.filter(x=>x.f===hoy).reduce((s,x)=>s+(Number(x.n)||0),0);
+    const k1=h('div',{class:'btkpi dmkpi'},h('b',{html:ICO}),h('span',{text:'Diamantes hoy'})); k1.firstChild.append(num(esMesActual?totHoy:0));
+    const k2=h('div',{class:'btkpi dmkpi'},h('b',{html:ICO}),h('span',{text:'Diamantes en '+nomMes(mesVer)})); k2.firstChild.append(num(totMes));
+    const k3=h('div',{class:'btkpi'},h('b',{text:num(items.length)}),h('span',{text:'Lanzamientos en el mes'}));
+    $('dmkpis').replaceChildren(...(esMesActual?[k1,k2,k3]:[k2,k3]));
+    const k=norm(busca);
+    const L=items.filter(x=>!k||norm(x.u).includes(k)||String(x.cid||'').startsWith(k)||norm(x.ev).includes(k)).sort((a,b)=>(a.f<b.f?1:a.f>b.f?-1:0)||(a.ts<b.ts?1:-1));
+    tb.textContent='';
+    if(!L.length){ tb.appendChild(h('p',{class:'dmvacio',text:items.length?'No hay registros con esa búsqueda.':'Aún no registras diamantes en '+nomMes(mesVer)+'. Usa el formulario de arriba.'})); return; }
+    // Agrupado por día: encabezado con el total del día y una tarjeta por cada envío.
+    const dias=[]; L.forEach(x=>{ let g=dias[dias.length-1]; if(!g||g.f!==x.f){ g={f:x.f,xs:[]}; dias.push(g); } g.xs.push(x); });
+    dias.forEach(g=>{
+      const tot=g.xs.reduce((s,x)=>s+(Number(x.n)||0),0);
+      tb.appendChild(h('section',{class:'dmdia','aria-label':etiquetaDia(g.f)},
+        h('header',{class:'dmdiahd'},h('span',{class:'dmdiat'},h('b',{text:etiquetaDia(g.f)}),h('small',{text:fdm(g.f)})),h('span',{class:'dmdiatot'},h('span',{html:ICO}),num(tot),h('small',{text:' · '+g.xs.length+(g.xs.length===1?' envío':' envíos')}))),
+        h('ul',{class:'dmenv'},g.xs.map(x=>{
+          const q=h('button',{type:'button',class:'dmquitar','aria-label':'Quitar el envío a @'+x.u,title:'Quitar'},'Quitar');
+          q.onclick=async()=>{ if(q.dataset.c!=='1'){ q.dataset.c='1'; q.textContent='¿Seguro?'; q.classList.add('conf'); return; } q.disabled=true; try{ await cambiar(x.f.slice(0,7),v=>{ v.items=v.items.filter(i=>i.id!==x.id); }); avisar('Envío quitado'); }catch(e){ q.disabled=false; avisar('No se pudo quitar. Revisa tu conexión.'); } };
+          q.onblur=()=>{ q.dataset.c=''; q.textContent='Quitar'; q.classList.remove('conf'); };
+          return h('li',{class:'dmitem'},
+            h('span',{class:'dmav','aria-hidden':'true',text:(x.u||'?').charAt(0).toUpperCase()}),
+            h('span',{class:'dmwho'},h('b',{text:'@'+x.u}),x.ev?h('span',{class:'dmev',text:'🎉 '+x.ev}):null,h('small',null,x.cid?x.cid:'sin ID',horaDe(x.ts)?' · '+horaDe(x.ts):'')),
+            h('span',{class:'dmchip'},h('span',{html:ICO}),num(x.n)),
+            q);
+        }))));
+    });
+  }
+  function pintar(){
+    const s=$('vista-diamantes'); if(!s) return;
+    if(!s.dataset.listo){ s.dataset.listo='1';
+      const qi=h('input',{type:'search',class:'btq',placeholder:'Buscar creador, ID o evento…','aria-label':'Buscar diamantes'}); qi.addEventListener('input',()=>{ busca=qi.value; pintarLista(); });
+      const mi=h('input',{type:'month',class:'dmmes',id:'dmmes','aria-label':'Mes a ver'}); mi.value=mesVer; mi.max=hoyLima().slice(0,7);
+      mi.addEventListener('change',()=>{ if(!mi.value) return; mesVer=mi.value; D=null; pintarLista(); cargar(); });
+      s.append(
+        h('div',{class:'phead'},h('div',null,h('h2',{tabindex:'-1',text:'Diamantes'}),h('p',{text:'Registra cuántos diamantes le lanzaste a cada creador. Solo tú ves tus diamantes.'}))),
+        formulario(),
+        h('div',{class:'btkpis',id:'dmkpis'}),
+        h('div',{class:'dmtop'},h('div',{class:'dmtophd'},h('h3',{text:'🏆 Top de POC · diamantes entregados'}),h('div',{class:'btfil',id:'dmper',role:'group','aria-label':'Periodo del top'},[['dia','Hoy'],['semana','Semana'],['mes','Mes']].map(([k,l])=>h('button',{type:'button','data-k':k,'aria-pressed':String(periodo===k),onclick:()=>{ periodo=k; pintarTop(); }},l)))),h('div',{id:'dmtopl'})),
+        h('div',{class:'btbar'},h('div',{class:'dmbar2'},h('label',{for:'dmmes',class:'small',style:'font-size:12.5px;font-weight:600;color:#a6a3b3'},'Mes'),mi),qi),
+        h('div',{class:'dmlista',id:'dmrows','aria-live':'polite'}));
+    }
+    const d=$('dmdia'); if(d) d.max=hoyLima();
+    pintarLista();
+  }
+  function mostrar(v){ visible=v==='diamantes'; const s=$('vista-diamantes'); if(s) s.hidden=!visible; if(visible){ pintar(); pintarTop(); cargar(); cargarTop(); } }
+  function iniciar(){
+    if(!$('vdia')) return;
+    const ancla=$('vista-batallas'); if(!ancla){ setTimeout(iniciar,150); return; }
+    if(!$('vista-diamantes')) ancla.after(h('section',{class:'pv',id:'vista-diamantes','aria-label':'Diamantes',hidden:true}));
+    document.addEventListener('registro:vista',e=>mostrar(e.detail));
+    if(window.__cal&&window.__cal.vista) mostrar(window.__cal.vista());
+    setInterval(()=>{ const u=usuario(); if(u&&u!==quien){ quien=u; D=null; TOP=null; if(visible){ pintar(); pintarTop(); cargar(); cargarTop(); } } },800);
+    setInterval(()=>{ if(visible&&!document.hidden) cargarTop(); },60000); // el top se actualiza con lo que registran los demás
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(iniciar,0)); else setTimeout(iniciar,0);
 })();
 </script>
 </body>
